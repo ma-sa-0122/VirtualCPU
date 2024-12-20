@@ -1,0 +1,19 @@
+; 掛けられる数を GR2, 掛ける数を GR3 に入れているとする。
+MAIN    START
+        LAD     GR2, 3
+        LAD     GR3, 5          ; 3 * 5 となる
+        LAD     GR4, 0          ; GR4 の初期化
+        LAD     GR5, 0          ; GR5 の初期化
+
+MUL     CPA     GR3, =0         ; 掛ける数が 0 じゃないかの確認
+        JZE     M_END           ; 0 だったら計算しないで M_END に
+; カウンタを GR4 とする。繰り返し上限は GR3
+M_MAIN  LAD     GR4, 1, GR4     ; GR4 に 1 を足す
+        ADDA    GR5, GR2        ; 一時的に GR5 に GR2 を足す。掛け算の結果が GR5 に格納
+        CPA     GR4, GR3        ; カウンタ と 繰り返す回数 を比較
+        JMI     M_MAIN
+
+M_END   LD      GR2, GR5        ; 掛け算の結果を GR2 に移す
+        RET
+
+        END

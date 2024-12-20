@@ -1,0 +1,6 @@
+MAIN    START
+        OUT     string, len
+        RET
+string  DC      'Hello, World!'
+len     DC      13
+        END

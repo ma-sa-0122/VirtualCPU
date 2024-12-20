@@ -1,0 +1,62 @@
+MAIN    START
+        IN      STR, =256
+        
+TOKEN   LD      GR0, STR, GR1   ; 見るだけなので、GR1を増やさない
+        CPL     GR0, =#0080     ; 文字じゃない（asciiコード範囲の0x80より大きい）か
+        JPL     RETURN
+        CALL    ISNUM           ; 数字かどうか
+        CPL     GR6, =1         ; 数字のとき、
+        JZE     CALL_RV         ; READ_Vを呼ぶ。CALLだと無条件になっちゃうので緩衝する
+        JNZ     CALL_RC         ; 数字じゃないとき、READ_Cを呼ぶ
+
+CALL_RV LAD     GR2, 0          ; GR2 の初期化
+        CALL    READ_V
+        JUMP    TOKEN           ; まだ式が続いてるかもしれないので JUMP
+
+CALL_RC CALL    READ_C
+        ST      GR0, opr        ; 読み取った記号を opr に入れる
+        OUT     opr, =1         ; 読み取った記号を出力
+        JUMP    TOKEN           ; まだ式が続いてるかもしれないので JUMP
+
+; --- 以下、前節の関数たち ---
+
+; 数字列を数値に直して GR2 に格納する（戻り値 が 数値で、GR2 に）
+READ_V  CALL    READ_C          ; 1文字読む
+        ; 数字 を 数値 に変換して GR2 に格納する
+        SUBA    GR0, ='0'
+        LD      GR2, GR0
+READ_V2 ; 二文字目以降
+        LD      GR0, STR, GR1   ; 1文字見る
+        CALL    ISNUM           ; 数字かどうか
+        CPL     GR6, =0         ; 数字じゃないなら
+        JZE     RETURN          ; 終了
+        CALL    READ_C          ; 見るだけじゃなく読む
+        SUBA    GR0, ='0'       ; 数字を数値に変換
+        ; GR2 に元々持っている数を 10 倍して、
+MUL10   LD      GR4, GR2        ; 一時的に GR2 の値を GR4 に移す
+        SLA     GR4, 1          ; GR4 を 1桁 左シフト。2倍に相当
+        SLA     GR2, 3          ; GR2 を 3桁 左シフト。8倍に相当
+        ADDA    GR2, GR4        ; GR2 + GR4。8倍 + 2倍 なので 10倍 になる
+        ; GR2 に新しく読んだ数値を足す
+        ADDA    GR2, GR0
+        ; 数字が続く限り読み続けるので JUMP でループ
+        JUMP    READ_V2
+
+; 1文字読み取って GR0 に格納する
+READ_C  LD      GR0, STR, GR1
+        LAD     GR1, 1, GR1
+        RET
+
+; 読み取った文字が 数字（0 ~ 9 の間）か。数字なら GR6 を 1 に、数字じゃないなら 0 にする
+ISNUM   LAD     GR6, 0          ; GR0 の初期化
+        CPL     GR0, ='0'       ; '0' つまり 0x30 より小さい -> 違う
+        JMI     RETURN
+        CPL     GR0, ='9'       ; '0' つまり 0x39 より大きい -> 違う
+        JPL     RETURN
+        LAD     GR6, 1          ; 数字なので GR6 を 1 にする
+        RET
+
+RETURN  RET
+STR     DS      256
+opr     DS      1
+        END

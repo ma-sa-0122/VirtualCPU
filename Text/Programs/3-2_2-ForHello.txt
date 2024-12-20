@@ -1,0 +1,13 @@
+MAIN    START
+        LAD     GR0, 0       ; GR0 をカウンタとして使う。初期値0 を代入
+
+FOR     OUT     string, len  ; 繰り返したい部分の先頭を FOR とラベル付け　<---┐
+        ADDA    GR0, =1      ; カウンタを 1 増やす　　　　　　　　　　　　  ￤
+        CPL     GR0, count   ; カウンタ と 繰り返し回数 を比較　　　　　 　　￤
+        JMI     FOR          ; カウンタ < 繰り返し回数 なら FOR に戻る   ----┘
+
+        RET
+string  DC      'Hello, World!'
+len     DC      13
+count   DC      5            ; 繰り返し回数
+        END

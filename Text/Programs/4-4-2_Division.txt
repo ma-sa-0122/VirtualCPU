@@ -1,0 +1,25 @@
+; 割られる数を GR2, 割る数を GR3 に入れているとする。
+MAIN    START
+        LAD     GR2, 11
+        LAD     GR3, 2          ; 11 / 2 となる
+        LAD     GR4, 0          ; GR4 の初期化
+
+DIV     CPA     GR3, =0         ; 割る数が 0 じゃないかの確認
+        JZE     E_DIV0          ; 0 だったら E_DIV0 に飛ぶ
+; カウンタを GR4 とする。
+D_MAIN  CPA     GR2, GR3        ; 割られる数・残り と 割る数を比較
+        JMI     D_END           ; 残り < 割る数 なら D_END に飛ぶ
+        LAD     GR4, 1, GR4     ; GR4 に 1 を足す
+        SUBA    GR2, GR3        ; GR2 - 割る数。一回割った残りが GR2 に再格納される
+        JUMP    DIV             ; DIV に戻って繰り返し
+
+; 割り算の結果 今は商がGR4、余りがGR2に入っている
+D_END   LD      GR3, GR2        ; 余りを GR3 に移す
+        LD      GR2, GR4        ; 割り算の結果を GR2 に移す
+        RET
+
+; 0除算のエラー文を出力
+E_DIV0  OUT     ='Error: divided by 0', =19
+        RET
+
+        END

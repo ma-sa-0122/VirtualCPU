@@ -1,0 +1,72 @@
+MAIN    START
+        OUT     ='NUMTOS\tLAD\tGR3, 0', =17
+        OUT     ='\tLAD\tGR4, 0', =11
+        OUT     ='\tLAD\tGR5, 0', =11
+        OUT     ='\tLAD\tGR6, 0', =11
+        OUT     ='\tCPL\tGR2, =0', =12
+        OUT     ='\tJNZ\tDIV10', =10
+        OUT     ='\tPUSH\t0', =7
+        OUT     ='\tLAD\tGR6, 1', =11
+        OUT     ='\tST\tGR6, anslen', =15
+        OUT     ='\tJUMP\tSETANS', =12
+        OUT     ='DIV10\tCPL\tGR2, =0', =17
+        OUT     ='\tJZE\tSETANS', =11
+        OUT     ='\tCPL\tGR2, =10', =13
+        OUT     ='\tJMI\tSTACK', =10
+        OUT     ='\tLAD\tGR4, 1', =11
+        OUT     ='\tLAD\tGR5, 10', =12
+        OUT     ='D10_SFT\tCPA\tGR2, GR5', =20
+        OUT     ='\tJMI\tD10_PLS', =12
+        OUT     ='\tSLA\tGR4, 1', =11
+        OUT     ='\tSLA\tGR5, 1', =11
+        OUT     ='\tJUMP\tD10_SFT', =13
+        OUT     ='D10_PLS\tSRA\tGR4, 1', =18
+        OUT     ='\tSRA\tGR5, 1', =11
+        OUT     ='\tSUBA\tGR2, GR5', =14
+        OUT     ='\tADDA\tGR3, GR4', =14
+        OUT     ='\tJUMP\tDIV10', =11
+        OUT     ='STACK\tPUSH\t0, GR2', =17
+        OUT     ='\tLD\tGR2, GR3', =12
+        OUT     ='\tLAD\tGR3, 0', =11
+        OUT     ='\tLAD\tGR6, 1, GR6', =16
+        OUT     ='\tST\tGR6, anslen', =15
+        OUT     ='\tJUMP\tDIV10', =11
+        OUT     ='SETANS\tCPL\tGR6, GR3', =19
+        OUT     ='\tJZE\tRETURN', =11
+        OUT     ='\tPOP\tGR2', =8
+        OUT     ='\tADDA\tGR2, =#0030', =17
+        OUT     ='\tST\tGR2, ans, GR3', =17
+        OUT     ='\tLAD\tGR3, 1, GR3', =16
+        OUT     ='\tJUMP\tSETANS', =12
+        OUT     ='OUTPUT\tOUT\tans, anslen', =22
+        OUT     ='\tRET', =4
+        OUT     ='READ_V\tCALL\tREAD_C', =18
+        OUT     ='\tSUBA\tGR0, =#0030', =17
+        OUT     ='\tLD\tGR2, GR0', =12
+        OUT     ='READ_V2\tLD\tGR0, STR, GR1', =24
+        OUT     ='\tCALL\tISNUM', =11
+        OUT     ='\tCPL\tGR6, =0', =12
+        OUT     ='\tJZE\tRETURN', =11
+        OUT     ='\tCALL\tREAD_C', =12
+        OUT     ='\tSUBA\tGR0, =#0030', =17
+        OUT     ='MUL10\tLD\tGR4, GR2', =17
+        OUT     ='\tSLA\tGR4, 1', =11
+        OUT     ='\tSLA\tGR2, 3', =11
+        OUT     ='\tADDA\tGR2, GR4', =14
+        OUT     ='\tADDA\tGR2, GR0', =14
+        OUT     ='\tJUMP\tREAD_V2', =13
+        OUT     ='READ_C\tLD\tGR0, STR, GR1', =23
+        OUT     ='\tLAD\tGR1, 1, GR1', =16
+        OUT     ='\tRET', =4
+        OUT     ='ISNUM\tLAD\tGR6, 0', =16
+        OUT     ='\tCPL\tGR0, =#0030', =16
+        OUT     ='\tJMI\tRETURN', =11
+        OUT     ='\tCPL\tGR0, =#0039', =16
+        OUT     ='\tJPL\tRETURN', =11
+        OUT     ='\tLAD\tGR6, 1', =11
+        OUT     ='RETURN\tRET', =10
+        OUT     ='STR\tDS\t256', =10
+        OUT     ='anslen\tDC\t1', =11
+        OUT     ='ans\tDS\t5', =8
+        RET
+        END

@@ -1,0 +1,7 @@
+INPUT   START
+        IN       STR, =256
+        RET
+
+STR     DS       256
+
+        END
