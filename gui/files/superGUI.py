@@ -212,7 +212,7 @@ class Window(tkinter.Tk):
     
     def pause(self):
         self.isRunning = False
-        self.changeButton('stop')
+        self.changeButton('run')
 
     step = Step.FETCH   # staticな変数が欲しかった。
     isInput = False     # 同上。IN命令かどうか

@@ -600,4 +600,5 @@ class CASL2(CPU):
         return (mainOP == '0000'                                       # 主OPが0 (0x00 NOP が引っかかる)
                 or (int(mainOP, 2) <= 4 and subOP[1] == '1')           # 主OPが4以下 and 副OPが4以上 (論理演算系)
                 or mnemonic == "01110001" or mnemonic == "10000001"    # 0x71 (POP) or 0x81 (RET)
-                or mainOP == '1001' or mainOP == "1010")               # 主OPが9, A
+                or (mainOP == '1001' and subOP[1] == '1')              # 主OPが9 and 副OPが4以上
+                or mainOP == "1010")                                   # 主OPがA
