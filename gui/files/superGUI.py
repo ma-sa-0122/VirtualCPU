@@ -262,6 +262,7 @@ class Window(tkinter.Tk):
             ret = self.CPU.decode()
             self.updateDecode()
             if ret == 1:
+                self.step = Step.EXECUTE
                 self.promptInput()
                 return
         self.isInput = False

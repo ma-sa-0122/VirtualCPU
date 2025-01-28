@@ -337,7 +337,7 @@ class CASL2(CPU):
         mnem = self.getMnemonic(op)          # ニーモニック
         r1_num = int(self.IR[1], 2)          # レジスタ1部の数値
         r1 = "GR" + str(r1_num)              # レジスタ1の名前
-        r2_num = int(self.IR[2], 2)          # レジスタ1部の数値
+        r2_num = int(self.IR[2], 2)          # レジスタ2部の数値
         r2 = "GR" + str(r2_num)              # レジスタ2の名前
         addr = self.getAddress()             # アドレス値 (指標アドレス加算済み)
         opr1 = self.getValue(r1)             # r1の値
@@ -525,7 +525,9 @@ class CASL2(CPU):
             if opr2 == 0:
                 self.msg = "Error: 0で割ることはできません"
                 return -1
-            (self.GR[r1_num], self.GR[r2_num]) = self.div(opr1, opr2)
+            (self.GR[r1_num], remain) = self.div(opr1, opr2)
+            if op[5] == '1':
+                self.GR[r2_num] = remain
         
         elif mnem == "SETE":
             self.GR[r1_num] = 1 if self.FR & self.ZERO_FLAG else 0
