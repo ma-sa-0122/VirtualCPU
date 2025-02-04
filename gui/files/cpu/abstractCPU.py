@@ -140,7 +140,7 @@ class CPU(metaclass = ABCMeta):
         if isArith:
             max = (1 << (self.REGBIT - 1)) - 1
             if not(-max-1 <= number <= max):
-                self.msg += f"{number} は、符号付き{self.REGBIT}bit (-{max-1} ~ {max}) で表現できないため、OF → 1 になります\n"
+                self.msg += f"{number} は、符号付き{self.REGBIT}bit (-{max+1} ~ {max}) で表現できないため、OF → 1 になります\n"
                 self.FR |= self.OVERFLOW_FLAG
         else:
             max = (1 << self.REGBIT) - 1

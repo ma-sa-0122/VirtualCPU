@@ -52,7 +52,7 @@ class CASL2(CPU):
             # 10進数 or 16進数のとき
             if utils.isnum(const):
                 if utils.isValidNum(const):
-                    self.MEM[address] = utils.binary(utils.toInt(const))
+                    self.MEM[address] = utils.binary16(utils.toInt(const))
                     address += 1
                 else:
                     exceptions.InvalidValue(index+1, const)
@@ -62,7 +62,7 @@ class CASL2(CPU):
                 s = s.replace("\\t", "\t").replace("\\n", "\n") # 勝手にエスケープされて \\t とかになってるので、\t に直す
                 s = s.replace("\\'", "'")
                 for c in list(s):
-                    self.MEM[address] = utils.binary(ord(c))    # asciiコードに変換して代入
+                    self.MEM[address] = utils.binary16(ord(c))  # asciiコードに変換して代入
                     address += 1
             # ラベルのとき
             elif const in self.labels:
@@ -94,7 +94,7 @@ class CASL2(CPU):
                 addr = utils.toInt(addr)
                 if 0 <= addr < self.MEMLEN:
                     # 次のメモリ番地にアドレスを保存
-                    self.MEM[address] = utils.binary(addr)
+                    self.MEM[address] = utils.binary16(addr)
                 else:
                     raise exceptions.InvalidValue(index+1, addr)
             # リテラルのとき -> 一時的に、literalsにアドレスと値を保存
@@ -353,7 +353,7 @@ class CASL2(CPU):
         # ST命令。レジスタからアドレスに代入。
         elif mnem == "ST":
             self.msg = f"{r1}の値({opr1}) を 0x{addr:04X} にストアします\n"
-            self.MEM[addr] = utils.binary(opr1)
+            self.MEM[addr] = utils.binary16(opr1)
         
         # LAD。アドレス値をレジスタに代入
         elif mnem == "LAD":

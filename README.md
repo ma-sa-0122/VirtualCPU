@@ -46,17 +46,16 @@ markdown で記述し、markdown PDF (https://marketplace.visualstudio.com/items
 
 `n_photo/` ディレクトリには、教科書内に挿入されている画像ファイルが入っています。  
 PowerPointで作成しました。  
-`programs/` ディレクトリには、教科書内のアセンブリ言語プログラムをまとめています。  
+`programs/` ディレクトリには、教科書内のアセンブリ言語プログラムをまとめています。 
 
 ## VTL
 
 Very Tiny Language 関係が入っています（未完成）。  
 
-`compiler.py` および `interpreter.py` は動作し、コンパイラとして動作します。  
+`compiler.py` および `interpreter.py` は python で作成したVTLコンパイラ・インタプリタです。  
 
-`コンパイラ.as` は、仮想CPU用のアセンブリ言語で VTLのコンパイラを記述しようとしているものです。未完成。  
+`compiler.as` は、仮想CPU用のアセンブリ言語で VTLのコンパイラを記述したものです。`interpreter.as` はインタプリタです。  
 `コンパイラ.vtl` は、VTLで自身のコンパイラを記述しようとしているものです。未完成。  
 
 `テスト.txt` には、簡単なプログラム例が入っています。コンパイルが正しくできているかのテストコード的な何か。  
 `文法.txt` には、VTLの文法が定義されています。  
-

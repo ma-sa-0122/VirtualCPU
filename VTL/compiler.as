@@ -1,7 +1,6 @@
 ; VTLのコンパイラ
 ; GR0: 入力文字のchar
 ; GR1: 何文字目かカウンタ
-; GR3: ??のカウンタ
 ; GR4: 比較用の一時呼び出し先
 ; GR5: SETSTRでの文字数
 ; GR6: READ_V の返却値
@@ -11,6 +10,8 @@
 ; GR1: 被演算数・演算結果
 ; GR2: 演算数
 ; GR3: 変数値の呼び出し先
+; GR4: ??のカウンタ
+; GR5: !の一時格納先
 ;
 ; 文法
 ; programs   = program*
@@ -47,12 +48,7 @@ PROGRAM LD      GR0, input, GR1
         JZE     ERROR
         ; 行番号を取得
         CALL    READ_V
-        ST      GR6, val
-        ; 行番号を出力。#にも格納
-        OUT     val, =1, 4              ; 10進数値改行無し出力
-        OUT     ='\tLAD\tGR0, ', =10, 3 ; 改行無し出力
-        OUT     val, =1, 2              ; 10進数値出力
-        OUT     ='\tST\tGR0, #', =10
+        ST      GR6, row
         ; スペースか
         CALL    READ_C
         CPL     GR0, =' '
@@ -63,6 +59,11 @@ PROGRAM LD      GR0, input, GR1
         ; 変数名が ; の場合 -> 何もしないでこの行の解析終了
         CPL     GR0, =#003B
         JZE     RETURN
+        ; それ以外の場合、行番号を出力。#にも格納
+        OUT     row, =1, 4              ; 10進数値改行無し出力
+        OUT     ='\tLAD\tGR0, ', =10, 3 ; 改行無し出力
+        OUT     row, =1, 2              ; 10進数値出力
+        OUT     ='\tST\tGR0, #', =10
         ; イコールを処理（1文字飛ばす）
         LAD     GR1, 1, GR1
         ; expr部分
@@ -199,15 +200,14 @@ VAR_?   LD      GR0, input, GR1
         OUT     ='\tIN\t?, v256', =11
         JUMP    VARPUSH
 VAR_??  LAD     GR1, 1, GR1
-        LAD     GR3, 1, GR3
-        ST      GR3, count??
-        OUT     ='\tLD\tGR3, ?, ', =12, 3       ; 改行無し出力
-        OUT     count??, =1, 2                  ; 10進数出力
+        OUT     ='\tLAD\tGR4, 1, GR4', =16
+        OUT     ='\tLD\tGR3, ?, GR4', =15
         JUMP    PUSHGR3
 VAR_?n  CALL    READ_V
         ST      GR6, val
-        OUT     ='\tLD\tGR3, ?, ', =12, 3       ; 改行無し出力
+        OUT     ='\tLAD\tGR3, ', =10, 3         ; 改行無し出力
         OUT     val, =1, 2                      ; 10進数出力
+        OUT     ='\tLD\tGR3, ?, GR3', =15
         JUMP    PUSHGR3
 VAR_$   OUT     ='\tIN\t$, v1, 2', =12
         JUMP    VARPUSH
@@ -251,7 +251,13 @@ OUT2    OUT     ='\tPOP\tGR1', =8
         RET
 
 ; #で指定先に飛ぶ
-JMP#    OUT     ='\tJUMP\t0, GR1', =12
+JMP#    LD      GR2, row
+        LAD     GR2, 1, GR2
+        ST      GR2, row
+        OUT     ='\tLAD\tGR4, ', =10, 3
+        OUT     row, =1, 2
+        OUT     ='\tST\tGR4, !', =10
+        OUT     ='\tJUMP\t0, GR1', =12
         RET
 
 ; 標準出力（値）。'OUT    ?, v1, 2' を出力 
@@ -360,6 +366,8 @@ ISVAR   LAD     GR7, 0
         JZE     CHANGE
         CPL     GR0, ='~'
         JZE     CHANGE
+        CPL     GR0, ='!'
+        JZE     CHANGE
         CPL     GR0, =#0023     ; #, $, %
         JMI     RETURN
         CPL     GR0, =#0026
@@ -390,10 +398,10 @@ RETURN  RET
 
 dest    DC      'GR1, GR2'
 destlen DC      8
+row     DS      1                   ; 行番号の格納先
 var     DS      1                   ; 変数名
 val     DS      1                   ; 数値を"PUSH"するための一時的な格納先
 tempvar DS      1                   ; formula内の変数名を"PUSH"するための一時的な格納先
-count?? DS      1                   ; ??のカウンタ
 estr    DC      'Syntax Error!'
 elen    DC      13
 slen    DC      0                   ; 文字列stringの文字数

@@ -45,11 +45,20 @@ def toInt(s: str) -> int:
 
 def binary(num: int) -> str:
     '''
-    num の2進数表現を返す。負数は2の補数表現を返
+    num の2進数表現を返す。負数は2の補数表現を返す
     '''
     if num < 0:
         num = (~(-num) & ((1 << gv.REGISTER_BIT) -1)) + 1  # ビット反転に桁数制限(& 0xF...) +1 で二の補数表現
     return f"{num:0{gv.REGISTER_BIT}b}"
+
+def binary16(num: int) -> str:
+    '''
+    num の16bit2進数表現を返す。負数は2の補数表現を返す
+    '''
+    if num < 0:
+        num = (~(-num) & ((1 << 16) -1)) + 1  # ビット反転に桁数制限(& 0xF...) +1 で二の補数表現
+    return f"{num:016b}"
+
 
 def binToValue(bin, isArith: bool) -> int:
     '''
