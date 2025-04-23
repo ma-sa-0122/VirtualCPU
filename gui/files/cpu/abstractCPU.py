@@ -24,7 +24,12 @@ class CPU(metaclass = ABCMeta):
         self.PC = 0                                         # プログラムカウンタ 16bit
         self.SP = self.MEMLEN                               # スタックポインタ 16bit
         self.IR = 0                                         # 命令レジスタ 32bit
+        self.DEC = ["{0:08b}", "0000", "0000", "{0:016b}"]  # デコーダー 8+4+4+16bit
         self.MEM = [f"{self.INIT_VAL:016b}"]*self.MEMLEN    # メモリ 16bit MEMLEN-1番地まで
+
+        self.ALU_A = 0
+        self.ALU_B = 0
+        self.Acc = 0
 
         self.msg = ""                                       # GUIに表示するメッセージ。execute()の内部処理を可視化
         self.nowPC = 0                                      # 現在実行中のアドレス。GUIのハイライトに、ジャンプ命令とかの時に困らないため
@@ -55,6 +60,12 @@ class CPU(metaclass = ABCMeta):
     # getter達
     def getRegisters(self) -> list:
         return self.GR + [self.FR, self.PC, self.SP]
+    
+    def getIR(self) -> int:
+        return self.IR
+
+    def getDEC(self) -> list:
+        return self.DEC
 
     def getMsg(self) -> int:
         return self.msg
@@ -91,9 +102,11 @@ class CPU(metaclass = ABCMeta):
         pass
     
     @abstractmethod
-    def getAddressValue(self) -> int:
+    def getAddressValue(self, addr:int) -> int:
+        '''引数のメモリ番地に格納されている中身を返す'''
         '''命令レジスタのアドレス部と修飾部を参照し、参照先アドレスの中身の数値を返す。1語の場合はレジスタの値を返す'''
-    
+        pass
+
     def getValue(self, opr: str) -> int:
         '''オペランドが数値 or レジスタの場合に使う。中身の値を返す'''
         if utils.isnum(opr):
@@ -124,6 +137,9 @@ class CPU(metaclass = ABCMeta):
         isArith が真のとき、算術加算として扱う。
         isArith が偽のとき、論理加算として扱う。
         '''
+        self.ALU_A = a
+        self.ALU_B = b
+
         number = a + b
 
         # 計算結果を レジスタのビット数+1 桁にする (桁あふれしてたらそのまま、そうじゃなければ空白を追加)
@@ -135,6 +151,7 @@ class CPU(metaclass = ABCMeta):
 
         # 末尾から レジスタのビット数 だけ取り出す
         value = utils.binToValue(utils.binary(number)[-self.REGBIT:], isArith)
+        self.Acc = value
 
         self.setFlag(value)
         if isArith:
@@ -164,6 +181,10 @@ class CPU(metaclass = ABCMeta):
 
     
     def compare(self, a: int, b: int) -> None:
+        self.ALU_A = a
+        self.ALU_B = b
+        self.Acc = a - b
+
         val = a - b
         if val > 0:
             self.msg += f"{a} - {b} は正の数なので、SF → 0, ZF → 0 です\n"
@@ -180,7 +201,10 @@ class CPU(metaclass = ABCMeta):
         val を amount ビットだけ左シフトします。
         isArith が True で 算術左シフト、False で 論理左シフト
         '''
-        array = list(utils.binary(val))
+        self.ALU_A = utils.binary(val)
+        self.ALU_B = amount
+
+        array = list(self.ALU_A)
         fixbit = array[0]
         for _ in range(amount):
             array.append('0')
@@ -189,6 +213,8 @@ class CPU(metaclass = ABCMeta):
         if isArith:
             over = int(array[amount])
             result[0] = fixbit
+        
+        self.Acc = utils.binToValue(result, isArith)
         return (result, over)
 
     def rshift(self, val: int, amount: int, isArith: bool) -> tuple[list[str], int]:
@@ -196,11 +222,16 @@ class CPU(metaclass = ABCMeta):
         val を amount ビットだけ左シフトします。
         isArith が True で 算術左シフト、False で 論理左シフト
         '''
-        array = list(utils.binary(val))
+        self.ALU_A = utils.binary(val)
+        self.ALU_B = amount
+
+        array = list(self.ALU_A)
         fixbit = array[0]
         for _ in range(amount):
             array.insert(0, fixbit if isArith else '0')
         result = array[0:self.REGBIT]                 # 先頭に0を追加していき、先頭からnビット取る
+
+        self.Acc = utils.binToValue(result, isArith)
         return (result, int(array[self.REGBIT]))
 
 

@@ -320,12 +320,12 @@ class CASL2(CPU):
 
     def decode(self) -> int:
         isINop = (True if self.IR[0:30] == "111100000000000000000000000000" else False)
-        self.IR = [self.IR[0:8], self.IR[8:12], self.IR[12:16], self.IR[16:32]]
+        self.DEC = [self.IR[0:8], self.IR[8:12], self.IR[12:16], self.IR[16:32]]
         self.msg = (f"デコード:\n"
-                    f"  op  : {self.IR[0]}  ({self.getMnemonic(self.IR[0])})\n"
-                    f"  r/r1: {self.IR[1]}\n"
-                    f"  x/r2: {self.IR[2]}\n"
-                    f"  adr : {self.IR[3]}  (0x{int(self.IR[3], 2):04X})\n")
+                    f"  op  : {self.DEC[0]}  ({self.getMnemonic(self.DEC[0])})\n"
+                    f"  r/r1: {self.DEC[1]}\n"
+                    f"  x/r2: {self.DEC[2]}\n"
+                    f"  adr : {self.DEC[3]}  (0x{int(self.DEC[3], 2):04X})\n")
         
         if isINop:  return 1
         else:       return 0
@@ -333,11 +333,11 @@ class CASL2(CPU):
     def execute(self) -> int:
         self.msg = ""
 
-        op = self.IR[0]                      # オペコード
+        op = self.DEC[0]                     # オペコード
         mnem = self.getMnemonic(op)          # ニーモニック
-        r1_num = int(self.IR[1], 2)          # レジスタ1部の数値
+        r1_num = int(self.DEC[1], 2)          # レジスタ1部の数値
         r1 = "GR" + str(r1_num)              # レジスタ1の名前
-        r2_num = int(self.IR[2], 2)          # レジスタ2部の数値
+        r2_num = int(self.DEC[2], 2)          # レジスタ2部の数値
         r2 = "GR" + str(r2_num)              # レジスタ2の名前
         addr = self.getAddress()             # アドレス値 (指標アドレス加算済み)
         opr1 = self.getValue(r1)             # r1の値
@@ -548,37 +548,37 @@ class CASL2(CPU):
         return self.DICT_PCROW[self.nowPC]
     
     def getLabelRow(self) -> int:
-        if self.isRegisterOP(self.IR[0]):
+        if self.isRegisterOP(self.DEC[0]):
             return 0
         else:
-            addr = int(self.IR[3], 2)
+            addr = int(self.DEC[3], 2)
             try:
                 return self.DICT_PCROW[addr]
             except:
                 return 0
 
-    # decode後に呼ばれるので、IRは [OP, r1, xr, addr] になっている
     def getAddress(self) -> int:
-        if self.isRegisterOP(self.IR[0]):
+        if self.isRegisterOP(self.DEC[0]):
             return 0x10000
-        address = int(self.IR[3], 2)   # 命令レジスタの下位16bit
-        register = int(self.IR[2], 2)  # 命令レジスタの12~15bit目。修飾部
+        address = int(self.DEC[3], 2)   # 命令レジスタの下位16bit
+        register = int(self.DEC[2], 2)  # 命令レジスタの12~15bit目。修飾部
         offset = self.GR[register] if register > 0 else 0   # GR0 は指標レジスタにならない
         return address + offset
     
-    def getAddressValue(self) -> int:
-        address = int(self.IR[3], 2)   # 命令レジスタの下位16bit
-        register = self.GR[int(self.IR[2], 2)]
-        if address == 0:
-            return register
+    def getAddressValue(self, addr:int = None) -> int:
+        if addr is None:
+            address = int(self.DEC[3], 2)   # 命令レジスタの下位16bit
+            register = self.GR[int(self.DEC[2], 2)]
+            if address == 0:
+                return register
+            else:
+                return int(self.MEM[self.getAddress()], 2)
         else:
-            return int(self.MEM[self.getAddress()], 2)
-
+            return self.MEM[addr]
 
     def getOperator(self) -> str:
         '''命令部の8bitを返す。fetch時点でもdecode後でも関係なく得られる'''
-        if len(self.IR) > 5:    return self.IR[0:8]
-        else               :    return self.IR[0]
+        return self.IR[0:8]
 
     def getMnemonic(self, bit: str) -> str:
         '''

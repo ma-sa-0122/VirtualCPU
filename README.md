@@ -2,10 +2,31 @@
 
 卒業研究用の仮想CPU関係を纏めたものです。  
 
+## 体験版テスターの方へ
+
+この GitHub 右側に、Release という欄があります。
+
+![releases](repo_images/release.png)
+
+そこから、「体験版」をクリック、`trial.zip` をダウンロード、展開してください。
+
+![trial](repo_images/trial.png)
+
+実行ファイルを作るツールの関係で、もしかしたら `main.exe`, `main2.exe` がウイルスと認識されてしまうかも。
+その時は、お手数ですがセキュリティソフトの設定を行ってください。
+また、「WindowsによってPCが保護されました」と青い物が出た場合は、「詳細情報」をクリックして、「実行」してください。
+
+体験版終わったら、アンケートにご協力ください。
+
 ## gui
 
 学習システムのGUIアプリケーションが入っています。  
 開発言語は Python3.9 です。  
+
+`main.exe`、`main2.exe` は、pyinstallerによりexe化を行ったものです。  
+その関係で、信じられないくらい起動に時間がかかります。20秒くらいは辛抱強く耐えてください。  
+可能な限り、Python (>= version 3.9) を環境構築した方がいいと思います。
+「煩わしい pip をしなくて済むように、標準モジュールだけで作る」をモットーにしたので、python入れるだけで動くはずです。
 
 ふぁいるつりー  
 
@@ -15,9 +36,10 @@ C:.
 │  main2.py
 │
 └─files
-    │  superGUI.py
+    │  diagram.py
     │  gui.py
     │  gui2.py
+    │  superGUI.py
     │
     ├─cpu
     │      abstractCPU.py
@@ -34,10 +56,12 @@ C:.
 使用modules  
 
 - abc
+- enum
 - random
 - re
 - Tkinter
 - typing
+- typing_extensions
 
 ## Text
 
@@ -46,7 +70,7 @@ markdown で記述し、markdown PDF (https://marketplace.visualstudio.com/items
 
 `n_photo/` ディレクトリには、教科書内に挿入されている画像ファイルが入っています。  
 PowerPointで作成しました。  
-`programs/` ディレクトリには、教科書内のアセンブリ言語プログラムをまとめています。 
+`programs/` ディレクトリには、教科書内のアセンブリ言語プログラムをまとめています。 　
 
 ## VTL
 

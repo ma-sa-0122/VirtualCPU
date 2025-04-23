@@ -49,11 +49,13 @@ class GUI2(Window):
 
         memory = ""
         lab = ""
+        isError = False
         try:
             memory = self.CPU.write(data)
             lab = self.CPU.getLabels()
             self.buttonSetting('able')
         except Exception as e:
+            isError = True
             memory = "Error\n" + str(e)
             self.buttonSetting('disable')
         
@@ -67,3 +69,7 @@ class GUI2(Window):
         self.updateRegs()
         self.changeButton('run')
         self.step = 0
+
+        if isError: return
+
+        self.makeDiagram()
