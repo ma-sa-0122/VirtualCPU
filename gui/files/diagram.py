@@ -95,6 +95,7 @@ class CPUDiagram(tk.Toplevel):
         self.title("CPU model diagram")
         self.geometry("900x600")
         self.cpu = cpu
+        self.protocol("WM_DELETE_WINDOW", self.on_close)  # 閉じる処理
 
         self.op = ""
         self.r1 = 0
@@ -188,6 +189,10 @@ class CPUDiagram(tk.Toplevel):
           | {"memst-gr"+str(i)  : [self.canvas.create_line(regm,   220, 240 + i*35, fill="green", width=2)] for i in range(8)}
 
         self.lightupExec()
+    
+    def on_close(self):
+        self.master.diagram_window = None   # 親ウィンドウの参照をNoneにする
+        self.destroy()
 
     def readIR(self):
         self.updateState("IR_fetch")

@@ -304,47 +304,53 @@ class Window(tkinter.Tk):
         if self.step == Step.IR_FETCH:
             self.CPU.fetch()
             self.updateFetch()
-            if self.diagram_window is not None: self.diagram_window.readIR()
+            if self.diagram_window is not None and self.diagram_window.winfo_exists():
+                self.diagram_window.readIR()
             self.step += 1
-            if tp == ExecType.DIAGRAM:  return
+            if tp == ExecType.DIAGRAM: return
 
         if self.step == Step.FETCH:
-            if self.diagram_window is not None: self.diagram_window.increPC()
+            if self.diagram_window is not None and self.diagram_window.winfo_exists():
+                self.diagram_window.increPC()
             self.step += 1
             if tp == ExecType.DIAGRAM or tp == ExecType.STEPIN: return
-        
+
         if self.step == Step.DECODE:
             self.ret = self.CPU.decode()
             self.updateDecode()
-            if self.diagram_window is not None: self.diagram_window.decode()
+            if self.diagram_window is not None and self.diagram_window.winfo_exists():
+                self.diagram_window.decode()
             self.step += 1
             if self.ret == 1:
                 self.promptInput()
                 return
-            if tp == ExecType.DIAGRAM or tp == ExecType.STEPIN:  return
+            if tp == ExecType.DIAGRAM or tp == ExecType.STEPIN: return
 
         if self.step == Step.DATA_READY:
             self.ret = self.CPU.execute()
             self.isInput = False
-            if self.diagram_window is not None: self.diagram_window.readReady()
+            if self.diagram_window is not None and self.diagram_window.winfo_exists():
+                self.diagram_window.readReady()
             self.step += 1
             if tp == ExecType.DIAGRAM: return
 
         if self.step == Step.DATA_FETCH:
-            if self.diagram_window is not None: self.diagram_window.dataFetch()
+            if self.diagram_window is not None and self.diagram_window.winfo_exists():
+                self.diagram_window.dataFetch()
             self.step += 1
             if tp == ExecType.DIAGRAM: return
 
         if self.step == Step.ACCUMLATE:
-            if self.diagram_window is not None: self.diagram_window.accumulate()
+            if self.diagram_window is not None and self.diagram_window.winfo_exists():
+                self.diagram_window.accumulate()
             self.step += 1
             if tp == ExecType.DIAGRAM: return
-        
-        if self.diagram_window is not None: self.diagram_window.writeback()
+
+        if self.diagram_window is not None and self.diagram_window.winfo_exists():
+            self.diagram_window.writeback()
         self.button_fast["state"] = tkinter.NORMAL
         self.button_execute["state"] = tkinter.NORMAL
         self.updateExecute(self.ret)
-        return
     
     def promptInput(self):
         self.infoAdd("\n**ユーザ入力を行って実行を継続してください**\n")
