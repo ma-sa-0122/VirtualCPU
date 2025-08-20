@@ -1,0 +1,314 @@
+MAIN    START
+        IN      STR, =256
+
+; <row> ::= <dest> "=" <source>
+ROW     CALL    DEST
+        CALL    READ_C
+        CPL     GR0, ='='
+        JNZ     ERROR
+        CALL    SOURCE
+        ; 左辺に応じて処理
+        LD      GR0, var
+        CALL    ISNUM
+        CPL     GR6, =1
+        JZE     LEFT_GR
+        ; ? のとき
+        LAD     GR2, #0032
+        ST      GR2, var
+        OUT     LDop, LDlen
+        OUT     ='\tCALL\tNUMTOS', =12
+        OUT     ='\tCALL\tOUTPUT', =12
+        RET
+        ; レジスタ名のとき
+LEFT_GR OUT     LDop, LDlen
+        RET
+
+; <dest> ::= "GR" number | "?"
+DEST    LD      GR0, STR, GR1
+        ; ? のとき
+        CPL     GR0, ='?'
+        JZE     DEST_?
+        ; レジスタ名 のはず
+        CALL    MAY_REG
+        ; レジスタ名 のとき -> レジスタ番号を var に
+        ADDA    GR2, =#0030
+        ST      GR2, var
+        RET
+        ; ? のとき -> ? を var に
+DEST_?  LAD     GR1, 1, GR1
+        ST      GR0, var
+        RET
+
+; <source> ::= "GR" number | <expr> | "?"
+SOURCE  LD      GR0, STR, GR1
+        ; ? のとき
+        CPL     GR0, ='?'
+        JZE     SRC_?
+        ; 数式 の時
+        CALL    ISNUM
+        CPL     GR6, =1
+        JZE     SRC_EX
+        ; レジスタ名 のはず
+        CALL    MAY_REG
+        ; レジスタ名 のとき -> SrcNum にレジスタ番号を代入
+        ADDA    GR2, =#0030
+        ST      GR2, SrcNum
+        RET
+        ; ? のとき -> IN, CALL READ_V を呼んで SrcNum に 7 を入れる
+SRC_?   LAD     GR1, 1, GR1
+        OUT     ='\tIN\tSTR, =256', =13
+        OUT     ='\tCALL\tREAD_V', =12
+        LAD     GR2, #0037
+        ST      GR2, SrcNum
+        RET
+        ; 数式のとき -> 計算して、計算結果を文字列に変換、'LAD    GR2, 結果', SrcNum: 2
+SRC_EX  CALL    EXPR
+        CALL    NUMTOS
+        ADDA    GR6, =10
+        ST      GR6, LADlen
+        OUT     LADop, LADlen
+        LAD     GR2, #0032
+        ST      GR2, SrcNum
+        RET
+
+; レジスタ名かどうか
+MAY_REG CALL    READ_C
+        CPL     GR0, ='G'
+        JNZ     ERROR
+        CALL    READ_C
+        CPL     GR0, ='R'
+        JNZ     ERROR
+        LD      GR0, STR, GR1
+        CALL    ISNUM
+        CPL     GR6, =0
+        JZE     ERROR
+        CALL    READ_V
+        CPL     GR2, =7
+        JPL     ERROR
+        RET
+
+; --- 以下、前章の関数たち ---
+; <expr> ::= <muldiv> ( "+" <muldiv> | "-" <muldiv> )*
+EXPR    CALL    MULDIV          ; <muldiv> の部分を読む
+EXPR_LP LD      GR0, STR, GR1   ; 1文字見る。+ か - のはず
+        CPL     GR0, ='+'       ; + のとき
+        JZE     TERM_PL
+        CPL     GR0, ='-'       ; - のとき
+        JZE     TERM_MI
+        RET                     ; + でも - でもない -> <expr> の終了
+; + のとき
+TERM_PL LAD     GR1, 1, GR1     ; 1文字進める（実質 + を読んだことになる）
+        PUSH    0, GR2          ; 計算結果をスタックに再格納
+        CALL    MULDIV          ; <muldiv> の部分を読む
+        PUSH    0, GR2          ; 計算結果をスタックに積む
+        POP     GR3             ; 右側の数をスタックから取り出す
+        POP     GR2             ; 先に読んだ左側の数をスタックから取り出す
+        CALL    PLUS            ; 計算する
+        JUMP    EXPR_LP         ; "+" <muldiv> | "-" <muldiv> が後ろにまだあるかもしれないので JUMP
+; - のとき
+TERM_MI LAD     GR1, 1, GR1     ; 1文字進める（実質 - を読んだことになる）
+        PUSH    0, GR2          ; 計算結果をスタックに再格納
+        CALL    MULDIV          ; <muldiv> の部分を読む
+        PUSH    0, GR2          ; 計算結果をスタックに積む
+        POP     GR3             ; 右側の数をスタックから取り出す
+        POP     GR2             ; 先に読んだ左側の数をスタックから取り出す
+        CALL    MINUS           ; 計算する
+        JUMP    EXPR_LP         ; "+" <muldiv> | "-" <muldiv> が後ろにまだあるかもしれないので JUMP
+
+; <muldiv> ::= <primary> ( "*" <primary> | "/" <primary> )*
+MULDIV  CALL    PRIMARY         ; <primary> の部分を読む
+MD_LP   LD      GR0, STR, GR1   ; 1文字見る。* か / のはず
+        CPL     GR0, ='*'       ; * のとき
+        JZE     TERM_ML
+        CPL     GR0, ='/'       ; / のとき
+        JZE     TERM_DV
+        RET                     ; * でも / でもない  -> <muldiv> の終了
+; * のとき
+TERM_ML LAD     GR1, 1, GR1     ; 1文字進める（実質 * を読んだことになる）
+        PUSH    0, GR2          ; 数値をスタックに積む
+        CALL    PRIMARY         ; <primary> の部分を読む
+        PUSH    0, GR2          ; 数値をスタックに積む
+        POP     GR3             ; 右側の数をスタックから取り出す
+        POP     GR2             ; 先に読んだ左側の数をスタックから取り出す
+        CALL    MUL             ; 計算する
+        JUMP    MD_LP           ; "*" <primary> | "-" <primary> が後ろにまだあるかもしれないので JUMP
+; / のとき
+TERM_DV LAD     GR1, 1, GR1     ; 1文字進める（実質 / を読んだことになる）
+        PUSH    0, GR2          ; 数値をスタックに積む
+        CALL    PRIMARY         ; <primary> の部分を読む
+        PUSH    0, GR2          ; 数値をスタックに積む
+        POP     GR3             ; 右側の数をスタックから取り出す
+        POP     GR2             ; 先に読んだ左側の数をスタックから取り出す
+        CALL    DIV             ; 計算する
+        JUMP    MD_LP           ; "*" <primary> | "-" <primary> が後ろにまだあるかもしれないので JUMP
+
+; <primary> ::= number | "(" <expr> ")"
+PRIMARY LD      GR0, STR, GR1   ; 1文字見る
+        CALL    ISNUM           ; 数字かどうか
+        CPL     GR6, =1         ; 数字だったら
+        JZE     NUMBER          ; number に飛ぶ
+        ; それ以外のときは、 "(" <expr> ")" のはず
+        LAD     GR1, 1, GR1     ; 1文字進める（実質 ( を読んだことになる）
+        CPL     GR0, ='('
+        JNZ     ERROR           ; ( じゃなければ、文法的に間違っている
+        CALL    EXPR            ; <expr> の部分を読む
+        CALL    READ_C          ; 1文字読む
+        CPL     GR0, =')'
+        JNZ     ERROR           ; ) じゃなければ、文法的に間違っている
+        RET
+
+; number
+NUMBER  CALL    READ_V          ; 数値を読む
+        RET
+
+; 文法的に間違っているとき
+ERROR   OUT     ='Syntax Error!', =13   ; エラーメッセージを出力
+FIN     POP     GR0
+        JUMP    FIN             ; スタックにあるものを全部吐き出して異常停止させる
+
+; 計算結果の出力
+NUMTOS  LAD     GR3, 0          ; 使うレジスタたちの初期化
+        LAD     GR4, 0
+        LAD     GR5, 0
+        LAD     GR6, 0
+        CPL     GR2, =0         ; 値が 0 じゃなければ、DIV10 に飛ぶ
+        JNZ     DIV10
+        PUSH    0               ; 値が 0 なら、0 を積んで 桁数を1にして SETANS へ
+        LAD     GR6, 1
+        JUMP    SETANS
+DIV10   CPL     GR2, =0         ; 値が 0 になるまでループ
+        JZE     SETANS
+        ; GR2 / 10 をして、商を GR3 に
+        CPL     GR2, =10        ; 割られる数・差分が 10 より小さくなったら
+        JMI     STACK           ; 割り算終了。STACK に飛ぶ
+        LAD     GR4, 1          ; GR4 の初期化（予め商を 1 としておく）
+        LAD     GR5, 10         ; 割る数の設定
+D10_SFT CPA     GR2, GR5        ; 割られる数・差分 と 最大値 を比較
+        JMI     D10_PLS         ; 差分 < 最大値 なら D_PLS に飛ぶ
+        SLA     GR4, 1          ; 商を左シフト
+        SLA     GR5, 1          ; 最大値を左シフト
+        JUMP    D10_SFT
+D10_PLS SRA     GR4, 1          ; GR4, GR5 は 割られる数・差分を超えるまで増やしてるので、
+        SRA     GR5, 1          ; 1回分 戻す。右シフト
+        SUBA    GR2, GR5        ; GR2 - 最大値。一回割った差分が GR2 に再格納される
+        ADDA    GR3, GR4        ; 商を GR3 に足す
+        JUMP    DIV10           ; DIN10 に戻って繰り返し
+        ; GR2 / 10 が終わったら、余りは GR2 に入っている
+STACK   PUSH    0, GR2          ; インデックス修飾で GR2 の値を PUSH
+        LD      GR2, GR3        ; 商を GR2 に移動
+        LAD     GR3, 0          ; GR3 を初期化
+        LAD     GR6, 1, GR6     ; 桁数を GR6 に保持
+        JUMP    DIV10
+
+; スタックから取り出して数字列を作る。今何桁目 を GR3 に入れるとする
+SETANS  CPL     GR6, GR3        ; 全桁終わるまで繰り返し
+        JZE     RETURN
+        POP     GR2
+        ADDA    GR2, =#0030     ; 数値 を 数字 に変換
+        ST      GR2, ans, GR3   ; インデックス修飾で「何桁目」を指定する
+        LAD     GR3, 1, GR3     ; 今読んだ桁数を増やす
+        JUMP    SETANS
+RETURN	RET
+
+; ----------------------
+; 構文解析に使う関数たち
+
+; 数字列を数値に直して GR2 に格納する（戻り値 が 数値で、GR2 に）
+READ_V  CALL    READ_C          ; 1文字読む
+        ; 読み取った文字が数字か
+        CALL    ISNUM
+        CPL     GR6, =0         ; 数字じゃないなら
+        JZE     RETURN          ; 終了
+        ; 数字 を 数値 に変換して GR2 に格納する
+        SUBA    GR0, ='0'
+        LD      GR2, GR0
+READ_V2 ; 二文字目以降
+        LD      GR0, STR, GR1   ; 1文字見る
+        CALL    ISNUM           ; 数字かどうか
+        CPL     GR6, =0         ; 数字じゃないなら
+        JZE     RETURN          ; 終了
+        CALL    READ_C          ; 見るだけじゃなく読む
+        SUBA    GR0, ='0'       ; 数字を数値に変換
+        ; GR2 に元々持っている数を 10 倍して、
+MUL10   LD      GR4, GR2        ; 一時的に GR2 の値を GR4 に移す
+        SLA     GR4, 1          ; GR4 を 1桁 左シフト。2倍に相当
+        SLA     GR2, 3          ; GR2 を 3桁 左シフト。8倍に相当
+        ADDA    GR2, GR4        ; GR2 + GR4。8倍 + 2倍 なので 10倍 になる
+        ; GR2 に新しく読んだ数値を足す
+        ADDA    GR2, GR0
+        ; 数字が続く限り読み続けるので JUMP でループ
+        JUMP    READ_V2
+
+; 1文字読み取って GR0 に格納する
+READ_C  LD      GR0, STR, GR1
+        LAD     GR1, 1, GR1
+        RET
+
+; 読み取った文字が 数字（0 ~ 9 の間）か。数字なら GR6 を 1 に、数字じゃないなら 0 にする
+ISNUM   LAD     GR6, 0          ; GR0 の初期化
+        CPL     GR0, ='0'       ; '0' つまり 0x30 より小さい -> 違う
+        JMI     RETURN
+        CPL     GR0, ='9'       ; '0' つまり 0x39 より大きい -> 違う
+        JPL     RETURN
+        LAD     GR6, 1          ; 数字なので GR6 を 1 にする
+        RET
+
+; ----------------------
+; 計算する関数たち
+
+; + のとき
+PLUS    ADDA    GR2, GR3
+        RET
+; - のとき
+MINUS   SUBA    GR2, GR3
+        RET
+; * のとき
+MUL     LAD     GR5, 0          ; GR5 の初期化
+M_MAIN  CPA     GR3, =0         ; 掛ける数が 0 じゃないかの確認
+        JZE     M_END           ; 0 だったら計算しないで M_END に
+        ; 掛ける数を一桁ずつ見る。右シフトで溢れた値（OFに格納）を見る
+        SRL     GR3, 1          ; 掛ける数を右シフト
+        JOV     M_PLS           ; 溢れたのが 1 だったら足す作業 M_PLS へ
+M_SFT   SLA     GR2, 1          ; 掛けられる数を左シフト。「桁をずらす」に相当
+        JUMP    M_MAIN
+M_PLS   ADDA    GR5, GR2        ; 一時的に GR5 に GR2 を足す。掛け算の結果が GR5 に格納
+        JUMP    M_SFT           ; 1桁目を計算する前にずらさないように、最後にシフト作業
+M_END   LD      GR2, GR5        ; 掛け算の結果を GR2 に移す
+        RET
+; / のとき
+DIV     LAD     GR6, 0          ; GR6 の初期化
+        CPA     GR3, =0         ; 割る数が 0 じゃないかの確認
+        JZE     E_DIV0          ; 0 だったら E_DIV0 に飛ぶ
+D_MAIN  CPA     GR2, GR3        ; 割られる数・残り と 割る数を比較
+        JMI     D_END           ; 残り < 割る数 なら D_END に飛ぶ
+        ; 商を GR4、その時の最大値を GR5 に入れる。
+        LAD     GR4, 1          ; GR4 の初期化（予め商を 1 としておく）
+        LD      GR5, GR3        ; GR5 の初期化（合わせて、最大値を 割る数 にしておく）
+D_SFT   CPA     GR2, GR5        ; 割られる数・差分 と 最大値 を比較
+        JMI     D_PLS           ; 差分 < 最大値 なら D_PLS に飛ぶ
+        SLA     GR4, 1          ; 商を左シフト
+        SLA     GR5, 1          ; 最大値を左シフト
+        JUMP    D_SFT
+D_PLS   SRA     GR4, 1          ; GR4, GR5 は 割られる数・差分を超えるまで増やしてるので、
+        SRA     GR5, 1          ; 1回分 戻す。右シフト
+        SUBA    GR2, GR5        ; GR2 - 最大値。一回割った差分が GR2 に再格納される
+        ADDA    GR6, GR4        ; 商を GR6 に足す
+        JUMP    D_MAIN          ; D_MAIN に戻って繰り返し
+; 割り算の結果 今は商がGR4、余りがGR2に入っている
+D_END   LD      GR3, GR2        ; 余りを GR3 に移す
+        LD      GR2, GR6        ; 割り算の結果を GR2 に移す
+        RET
+; 0除算のエラー文を出力
+E_DIV0  OUT     ='Error: divided by 0', =19
+        RET
+
+STR     DS      256
+LADlen  DC      0
+LADop   DC      '\tLAD\tGR2, '
+ans     DS      5
+LDlen   DC      12
+LDop    DC      '\tLD\tGR'
+var     DS      1
+regSrc  DC      ', GR'
+SrcNum  DS      1
+        END

@@ -1,0 +1,51 @@
+.red {
+  color: #cc3333;
+  font-weight: bold;
+}
+
+.orange {
+  color: #f7a24d;
+  font-weight: bold;
+}
+
+.under {
+    background: linear-gradient(transparent 75%, #a8eaff 25%);
+}
+
+/* -------------------------------------------------------------------- */
+/* C:\Users\yukku\.vscode\extensions\yzane.markdown-pdf-1.5.0\styles\markdown-pdf.css */
+
+pre {
+	background-color: #f8f8f8;
+	border: 1px solid #cccccc;
+	border-radius: 3px;
+	overflow-x: auto;
+	white-space: pre-wrap;
+	overflow-wrap: break-word;
+	margin-top: 0;
+	margin-bottom: 0;
+}
+
+pre:not(.hljs) {
+  padding: 10px 20px;
+	line-height: 19px;
+}
+
+code {
+	font-size: 14px;
+	line-height: 19px;
+}
+
+.entry-content pre.code[data-lang="CASL"] {
+  padding: 10px 20px !important;
+	line-height: 19px; 
+}
+
+/* for inline code */
+:not(pre):not(.hljs) > code {
+	background-color: #f5f4f4dc;
+	color: #404040; /* Change the old color so it seems less like an error */
+	font-size: inherit;
+	border-radius: 5px;
+	padding: 0px 4px;
+}

@@ -1,8 +1,8 @@
 import tkinter
 import tkinter.scrolledtext as st
-from typing_extensions import override
+from tkinter import ttk
 
-from files.superGUI import Window
+from files.superGUI import Window, FONT_MAIN
 
 class GUI2(Window):
     def __init__(self, cpu):
@@ -11,15 +11,25 @@ class GUI2(Window):
     def createWidgets(self):
         super().createWidgets()
         # 宣言つづき
-        self.labelbox = st.ScrolledText(self, height=8, width=40)
-        self.labelbox.insert("0.0", "ラベル一覧")
-        self.labelbox["state"] = tkinter.DISABLED
+        style = ttk.Style()
+        style.configure("Treeview",font=FONT_MAIN)
+        style.configure("Treeview.Heading",font=FONT_MAIN)
 
+        self.labelbox = ttk.Treeview(self, columns=('label', 'address'))
+        self.labelbox.column('#0', width=0, stretch='no')
+        self.labelbox.column('label', width=220, anchor='w')
+        self.labelbox.column('address', width=150, anchor='w')
+        self.labelbox.heading('#0', text='', anchor='w')
+        self.labelbox.heading('label', text='label Name', anchor='center')
+        self.labelbox.heading('address', text='address', anchor='center')
+        self.labelbox.bind("<Button-1>", self.labSelect)    # 左クリック
+        
         # 配置つづき
         self.infobox['height'] = 8
         self.infobox.place(x=400, y=50)
         self.membox['height'] = 8
         self.membox.place(x=400, y=235)
+        self.labelbox['height'] = 7
         self.labelbox.place(x=400, y=420)
 
         self.frame_info.place(x=800, y=50)
@@ -29,47 +39,26 @@ class GUI2(Window):
 
     # テキストボックスの内容を弄る関係
     # labelbox
-    def labWrite(self, str):
-        self.labelbox["state"] = tkinter.NORMAL
-        self.labelbox.insert(tkinter.END, str)
-        self.labelbox["state"] = tkinter.DISABLED
-        self.labelbox.yview_moveto(0)
+    def labWrite(self, d: dict):
+        for i, (k, v) in enumerate(d.items()):
+            self.labelbox.insert(parent='', index='end', iid=i ,values=(k, f"0x{v:04X}"))
 
     def labClear(self):
-        self.labelbox["state"] = tkinter.NORMAL
-        self.labelbox.delete("0.0", "end")
-        self.labelbox["state"] = tkinter.DISABLED
-        self.labelbox.yview_moveto(0)    # 先頭にスクロール
+        self.labelbox.delete(*self.labelbox.get_children())
+    
+    def labSelect(self, event):
+        index = self.labelbox.focus()
+        if not index:
+            return
+        address = self.labelbox.item(index, 'values')[1]
+        super().memScroll(int(address, 16) / 0xFFFF)
 
+    def assemble(self) -> int:
+        ret = super().assemble()
+        if ret < 0:
+            return
 
-    @override
-    def assemble(self):
-        data = self.codebox.get("1.0", "end-1c")    # 全て文字列で返る。endだと最後の改行文字まで受け取ってしまうので -1c
-        data = data.split("\n")                     # 改行文字で配列化 -> 行単位
-
-        memory = ""
-        lab = ""
-        isError = False
-        try:
-            memory = self.CPU.write(data)
-            lab = self.CPU.getLabels()
-            self.buttonSetting('able')
-        except Exception as e:
-            isError = True
-            memory = "Error\n" + str(e)
-            self.buttonSetting('disable')
-        
-        self.clearHighlight()
-        self.outputClear()
-        self.infoClear()
-        self.memClear()
-        self.memWrite(memory, 0)
         self.labClear()
+        lab = self.CPU.getLabels()
         self.labWrite(lab)
-        self.updateRegs()
-        self.changeButton('run')
-        self.step = 0
-
-        if isError: return
-
-        self.makeDiagram()
+    

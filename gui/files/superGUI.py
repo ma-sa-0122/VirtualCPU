@@ -1,9 +1,17 @@
 from enum import IntEnum
 import tkinter
+import tkinter.font
 import tkinter.scrolledtext as st
+import tkinter.filedialog
+import os
 
 from files.diagram import CPUDiagram
 from files.util import utils
+
+
+FONT_MAIN = ("Cascadia Code", 11)
+COLOR_HIGHLIGHT = "yelllow"
+COLOR_LABEL = "#ff7f50"
 
 
 class ExecType(IntEnum):
@@ -22,6 +30,151 @@ class Step(IntEnum):
     ACCUMLATE = 5
     EXECUTE = 6
 
+class TextBoxManager:
+    def __init__(self):
+        self.boxes = {}
+    
+    def setInstance(self, name, inst):
+        self.boxes[name] = inst
+    
+    def scroll(self, name, scroll: float):
+        self.boxes[name].yview_moveto(scroll)
+
+    def clear(self, name):
+        box = self.boxes[name]
+        box["state"] = tkinter.NORMAL
+        box.delete("0.0", "end")
+        box["state"] = tkinter.DISABLED
+        box.yview_moveto(0)
+
+    def write(self, name, text, scroll=1):
+        box = self.boxes[name]
+        box["state"] = tkinter.NORMAL
+        box.insert("end", text)
+        box["state"] = tkinter.DISABLED
+        box.yview_moveto(scroll)
+    
+    def getText(self, name):
+        return self.boxes[name].get("0.0", "end")
+
+class ExecuteController:
+    def __init__(self, window, cpu):
+        self.window = window
+        self.cpu = cpu
+        self.reset()
+
+    def setCallback(self, after, promptInput, updateFetch, updateDecode, updateExecute, execDiagram):
+        self.on_after = after
+        self.on_prompt_input = promptInput
+        self.on_update_fetch = updateFetch
+        self.on_update_decode = updateDecode
+        self.on_update_execute = updateExecute
+        self.on_exec_step_diagram = execDiagram
+
+    def reset(self):
+        self.step = Step.IR_FETCH
+        self.is_running = False
+        self.is_input = False
+        self.ret = 0
+
+    def execute(self, tp):
+        # 実行。try-except でCPU内での実行時エラーを受け取る
+        try:
+            # 最速で実行する場合
+            if tp == ExecType.FAST:
+                self.exec_fast()
+            # 最後まで実行する場合
+            elif tp == ExecType.ALL:
+                self.is_running = True
+                self.is_input = False
+                self.exec_all()
+            #ステップ実行の場合
+            else:
+                self.exec_step(tp)
+        except Exception as e:
+            raise e
+
+    def exec_fast(self):
+        # 終わるまでとにかくwhileで実行し続ける
+        while True:
+            if not self.is_input:
+                self.cpu.fetch()
+                ret = self.cpu.decode()
+                if ret == 1:
+                    self.is_input = True
+                    self.on_prompt_input()
+                    break
+            self.is_input = False
+            self.ret = self.cpu.execute()
+            if self.ret != 0:
+                break
+        self.on_update_execute(self.ret)
+
+    def exec_all(self):
+        if not self.is_running:
+            return
+        if not self.is_input:
+            self.exec_step(ExecType.ALL)
+        if self.ret == 0:
+            self.on_after(200, self.exec_all)
+
+    def exec_step(self, tp: ExecType):
+        if self.step == Step.IR_FETCH:
+            self.cpu.fetch()
+            self.on_update_fetch()
+            self.callStepDiagram()
+            self.step += 1
+            if tp == ExecType.DIAGRAM:
+                return
+
+        if self.step == Step.FETCH:
+            self.callStepDiagram()
+            self.step += 1
+            if tp == ExecType.STEPIN or tp == ExecType.DIAGRAM:
+                return
+
+        if self.step == Step.DECODE:
+            self.ret = self.cpu.decode()
+            self.on_update_decode()
+            self.callStepDiagram()
+            self.step += 1
+            if self.ret == 1:
+                self.is_input = True
+                self.on_prompt_input()
+                return
+            if tp == ExecType.STEPIN or tp == ExecType.DIAGRAM:
+                return
+
+        if self.step == Step.DATA_READY:
+            self.ret = self.cpu.execute()
+            self.is_input = False
+            self.callStepDiagram()
+            self.step += 1
+            if tp == ExecType.DIAGRAM:
+                return
+
+        if self.step == Step.DATA_FETCH:
+            self.callStepDiagram()
+            self.step += 1
+            if tp == ExecType.DIAGRAM:
+                return
+
+        if self.step == Step.ACCUMLATE:
+            self.callStepDiagram()
+            self.step += 1
+            if tp == ExecType.DIAGRAM:
+                return
+
+        # EXECUTE完了
+        self.on_update_execute(self.ret)
+        self.callStepDiagram()
+        self.step = Step.IR_FETCH
+
+    def callStepDiagram(self):
+        if self.on_exec_step_diagram:
+            self.on_exec_step_diagram(self.step)
+
+
 class Window(tkinter.Tk):
     def __init__(self, cpu, windowsize):
         super().__init__()
@@ -29,64 +182,113 @@ class Window(tkinter.Tk):
         self.title(u"Software Title")
         self.geometry(windowsize)
         self.resizable(False, False)
-        self.option_add("*font", ["Cascadia Code", 11])
+        self.option_add("*font", FONT_MAIN)
 
         self.step = Step.IR_FETCH
         self.showDiagram = tkinter.BooleanVar()
+        self.diagram_window = None
 
         self.CPU = cpu
-        self.diagram_window = None
         self.register_num = self.CPU.REGISTER_NUM
+        self.CPUexecution = ExecuteController(self, cpu)
+        self.CPUexecution.setCallback(
+            after=self.after,
+            promptInput=self.promptInput,
+            updateFetch=self.updateFetch,
+            updateDecode=self.updateDecode,
+            updateExecute=self.updateExecute,
+            execDiagram=self.exec_step_diagram
+        )
+
+        self.textbox_manager = TextBoxManager()
         self.createWidgets()
-        self.buttonSetting('disable')
+        self.createMenubar()
+        self.buttonSetting(tkinter.DISABLED)
 
     def createWidgets(self):
-        self.button_assemble = tkinter.Button(self, text="Assemble", command=self.assemble)
-        self.button_fast = tkinter.Button(self, text="F", command=lambda: self.execute(ExecType.FAST))
-        self.button_execute = tkinter.Button(self, text="▶", command=lambda: self.execute(ExecType.ALL))
-        self.button_step = tkinter.Button(self, text="→", command=lambda: self.execute(ExecType.STEP))
-        self.button_stepin = tkinter.Button(self, text="↓", command=lambda: self.execute(ExecType.STEPIN))
-        self.button_diagram = tkinter.Button(self, text="■", command=lambda: self.execute(ExecType.DIAGRAM))
+        self.createButtons()
+        self.createCodebox()
+        self.createInOutbox()
+        self.createMemoryLogbox()
+        self.createRegisterFrame()
+
+        self.placeWigdgets()
+
+        # ショートカットキー関係
+        self.bind('<Control-semicolon>', self.increaseFontSize)
+        self.bind('<Control-minus>', self.decreaseFontSize)
+
+    def createButtons(self):
+        self.buttons = {
+            "assemble": tkinter.Button(self, text="Assemble", command=self.assemble),
+            "fast": tkinter.Button(self, text="F", command=lambda: self.execute(ExecType.FAST)),
+            "execute": tkinter.Button(self, text="▶", command=lambda: self.execute(ExecType.ALL)),
+            "step": tkinter.Button(self, text="→", command=lambda: self.execute(ExecType.STEP)),
+            "stepin": tkinter.Button(self, text="↓", command=lambda: self.execute(ExecType.STEPIN)),
+            "diagram": tkinter.Button(self, text="■", command=lambda: self.execute(ExecType.DIAGRAM)),
+        }
         self.check_button = tkinter.Checkbutton(self, text="CPUモデル\nを表示", variable=self.showDiagram)
 
+    def placeButtons(self):
+        x_positions = {
+            "assemble": (150, 5, 100),
+            "fast": (400, 5, 40),
+            "execute": (450, 5, 40),
+            "step": (500, 5, 40),
+            "stepin": (550, 5, 40),
+            "diagram": (650, 5, 40),
+        }
+
+        for name, (x, y, w) in x_positions.items():
+            self.buttons[name].place(x=x, y=y, width=w, height=40)
+
+        self.check_button.place(x=700, y=0)
+
+    def createCodebox(self):
         self.frame_code = tkinter.Frame(self, width=350, height=400)
         self.codebox = tkinter.Text(self.frame_code, height=18, width=40, undo=True, wrap=tkinter.NONE)
         self.scrollbar = tkinter.Scrollbar(self.frame_code, orient="horizontal", width=20, command=self.codebox.xview)
         self.codebox.config(xscrollcommand=self.scrollbar.set)
-        self.codebox.tag_config('row', background="yellow"); self.codebox.tag_add('row', "0.0", "0.0")
-        self.codebox.tag_config('label', background="#ff7f50"); self.codebox.tag_add('label', "0.0", "0.0")
+
+        self.codebox.tag_config('row', background="yellow")
+        self.codebox.tag_config('label', background="#ff7f50")
         self.codebox.insert("0.0", "MAIN\tSTART\n\t\n\tRET\n\tEND")
+        self.textbox_manager.setInstance("code", self.codebox)
 
-        self.inputbox = tkinter.Entry(self, width=40)
+    def createInOutbox(self):
         self.label_input = tkinter.Label(self, text="Input", font=("Cascadia Code", 10))
+        self.inputbox = tkinter.Entry(self, width=40)
+        self.textbox_manager.setInstance("in", self.inputbox)
 
-        self.outbox = st.ScrolledText(self, height=3, width=40, state='disable')
         self.label_output = tkinter.Label(self, text="Output", font=("Cascadia Code", 10))
+        self.font_outbox = tkinter.font.Font(family="Cascadia Code", size=11)
+        self.outbox = st.ScrolledText(self, state='disabled', font=self.font_outbox)
+        self.textbox_manager.setInstance("out", self.outbox)
 
+    def createMemoryLogbox(self):
         self.membox = st.ScrolledText(self, width=40)
-        self.membox.tag_config('row', background="yellow"); self.membox.tag_add('row', "0.0", "0.0")
-        self.membox.tag_config('label', background="#ff7f50"); self.membox.tag_add('label', "0.0", "0.0")
+        self.membox.tag_config('row', background="yellow")
+        self.membox.tag_config('label', background="#ff7f50")
         self.membox.insert("0.0", "メモリ情報")
         self.membox["state"] = tkinter.DISABLED
+        self.textbox_manager.setInstance("mem", self.membox)
 
         self.infobox = st.ScrolledText(self, width=40)
         self.infobox.insert("0.0", "実行ログ")
         self.infobox["state"] = tkinter.DISABLED
-        
+        self.textbox_manager.setInstance("info", self.infobox)
+    
+    def createRegisterFrame(self):
         self.frame_info = tkinter.LabelFrame(self, text="Register", width=350)
-        self.label_GR = [tkinter.Label(self.frame_info, text=f"R{i}: {0:<8d}  ({utils.binary(0)} | 0x0000)", anchor=tkinter.W) for i in range(self.register_num)]
-        self.label_FR = tkinter.Label(self.frame_info, text="FR: 000", anchor=tkinter.W)    # text="OF: 0    SF: 0    ZF: 0")
-        self.label_PCSP = tkinter.Label(self.frame_info, text=f"PC: 0x0000        SP: 0x0000", anchor=tkinter.W)
+        self.label_GR = [
+            tkinter.Label(self.frame_info, text=f"R{i}: {0:<8d}  ({utils.binary(0)} | 0x0000)", anchor=tkinter.W)
+            for i in range(self.register_num)
+        ]
+        self.label_FR = tkinter.Label(self.frame_info, text="FR: 000", anchor=tkinter.W)
+        self.label_PCSP = tkinter.Label(self.frame_info, text="PC: 0x0000        SP: 0x0000", anchor=tkinter.W)
 
-        # 配置
-        self.button_assemble.place(x=150, y=5, width=100, height=40)
-        self.button_fast.place(x=400, y=5, width=40, height=40)
-        self.button_execute.place(x=450, y=5, width=40, height=40)
-        self.button_step.place(x=500, y=5, width=40, height=40)
-        self.button_stepin.place(x=550, y=5, width=40, height=40)
-        self.button_diagram.place(x=650, y=5, width=40, height=40)
-        self.check_button.place(x=700, y=0)
-        
+    def placeWigdgets(self):
+        self.placeButtons()
 
         self.codebox.pack(side=tkinter.TOP, fill=tkinter.BOTH, expand=True)
         self.scrollbar.pack(side=tkinter.BOTTOM, fill=tkinter.X)
@@ -95,25 +297,75 @@ class Window(tkinter.Tk):
         self.label_input.place(x=10, y=440)
         self.inputbox.place(x=10, y=470)
         self.label_output.place(x=10, y=495)
-        self.outbox.place(x=10, y=520)
+        self.outbox.place(x=10, y=520, width=370, height=65)  # pixel単位で指定。宣言時のwidthはテキストベースなのでfontsizeを変えるとボックスごと変わってしまう
+
+
+    def createMenubar(self):
+        self.menubar = tkinter.Menu(self)
+        self.config(menu=self.menubar)
+
+        self.filemenu = tkinter.Menu(self.menubar, tearoff=False)
+        self.filemenu.add_command(label='ソースコードを開く', command=self.loadFile)
+        self.filemenu.add_command(label='ソースコードを保存', command=self.saveFile)
+        self.filemenu.add_separator()
+        self.filemenu.add_command(label='メモリダンプ(binary)を保存', state=tkinter.DISABLED, command=self.saveBinary)
+
+        self.runmenu = tkinter.Menu(self.menubar, tearoff=False)
+        self.runmenu.add_command(label="高速実行（F）", command=lambda: self.execute(ExecType.FAST))
+        self.runmenu.add_command(label="通常実行（▶）", command=lambda: self.execute(ExecType.ALL))
+        self.runmenu.add_command(label="ステップ実行（→）", command=lambda: self.execStep(ExecType.STEP))
+        self.runmenu.add_command(label="ステップイン（↓）", command=lambda: self.execute(ExecType.STEPIN))
+        self.runmenu.add_command(label="CPUメモリステップ（■）", command=lambda: self.execute(ExecType.DIAGRAM))
+
+        self.menubar.add_cascade(label='ファイル', menu=self.filemenu)
+        self.menubar.add_cascade(label='実行', menu=self.runmenu)
+    
+    def loadFile(self):
+        fTyp = [("", "*")]
+        iDir = os.path.abspath(os.path.dirname(__file__))
+        filename = tkinter.filedialog.askopenfilename(filetypes=fTyp, initialdir=iDir)
+        code = ""
+        if filename != "":
+            try:
+                with open(filename, 'r', encoding="utf-8") as f:
+                    code = f.read()
+            except UnicodeDecodeError:
+                with open(filename, 'r', encoding="shift_jis") as f:
+                    code = f.read()
+        self.codebox.delete("0.0", "end")
+        self.codebox.insert("1.0", code)
+    
+    def saveFile(self):
+        code = self.codebox.get("1.0", "end")
+
+        fTyp = [("CASL2コード", ".casl2")]
+        iDir = os.path.abspath(os.path.dirname(__file__))
+        filename = tkinter.filedialog.asksaveasfilename(filetypes=fTyp, initialdir=iDir, defaultextension="casl2")
+        if filename != "":
+            with open(filename, "w", encoding="utf-8") as f:
+                f.write(code)
+    
+    def saveBinary(self):
+        data = ''.join(self.CPU.MEM)
+        # 8ビットずつintにしてbytesに変換
+        bdata = bytes(int(data[i:i+8], 2) for i in range(0, len(data), 8))
+
+        fTyp = [("バイナリファイル", ".bin")]
+        iDir = os.path.abspath(os.path.dirname(__file__))
+        filename = tkinter.filedialog.asksaveasfilename(filetypes=fTyp, initialdir=iDir, defaultextension="bin")
+        if filename != "":
+            with open(filename, "wb") as f:
+                f.write(bdata)
 
     def buttonSetting(self, flag: str):
         '''
-        実行関係のボタンのゾンビ化を管理する。flag = True でゾンビ化
+        実行関係のボタンのゾンビ化を管理する。
         用途 : Assemble するまで、実行関係のボタンを押せなくする
         '''
-        if flag == 'disable':
-            self.button_fast["state"] = tkinter.DISABLED
-            self.button_execute["state"] = tkinter.DISABLED
-            self.button_step["state"] = tkinter.DISABLED
-            self.button_stepin["state"] = tkinter.DISABLED
-            self.button_diagram["state"] = tkinter.DISABLED
-        else:
-            self.button_fast["state"] = tkinter.NORMAL
-            self.button_execute["state"] = tkinter.NORMAL
-            self.button_step["state"] = tkinter.NORMAL
-            self.button_stepin["state"] = tkinter.NORMAL
-            self.button_diagram["state"] = tkinter.NORMAL
+        self.menubar.entryconfig("実行", state=flag)
+        for name in ["fast", "execute", "step", "stepin", "diagram"]:
+            self.buttons[name]["state"] = flag
+
 
     # codebox, membox の、実行中命令、参照先アドレスをハイライトする関係
     def clearHighlight(self):
@@ -149,82 +401,76 @@ class Window(tkinter.Tk):
     
 
     # テキストボックスの内容を弄る関係
-    # infobox
     def infoAdd(self, s: str):
-        self.infobox["state"] = tkinter.NORMAL
-        self.infobox.insert(tkinter.END, s)
-        self.infobox["state"] = tkinter.DISABLED
-        self.infobox.yview_moveto(1)    # 最終行にスクロール
+        self.textbox_manager.write("info", s)
 
     def infoClear(self):
-        self.infobox["state"] = tkinter.NORMAL
-        self.infobox.delete("0.0", "end")
-        self.infobox["state"] = tkinter.DISABLED
-        self.infobox.yview_moveto(0)    # 先頭にスクロール
+        self.textbox_manager.clear("info")
     
-    # membox
+    def memScroll(self, scroll: float):
+        self.textbox_manager.scroll("mem", scroll)
+
     def memWrite(self, s: str, scroll: float):
-        self.membox["state"] = tkinter.NORMAL
-        self.membox.insert(tkinter.END, s)
-        self.membox["state"] = tkinter.DISABLED
-        self.membox.yview_moveto(scroll)    # スクロール位置を戻す
+        self.textbox_manager.write("mem", s, scroll)
 
     def memClear(self):
-        self.membox["state"] = tkinter.NORMAL
-        self.membox.delete("0.0", "end")
-        self.membox["state"] = tkinter.DISABLED
-        self.membox.yview_moveto(0)    # 先頭にスクロール
+        self.textbox_manager.clear("mem")
 
-
-    # input, output 関係
     def getInput(self):
-        str = self.inputbox.get()
-        self.inputbox.delete(0, tkinter.END)
-        return str
+        return self.inputbox.get()
 
     def outputWrite(self, s: str):
-        self.outbox["state"] = tkinter.NORMAL
-        self.outbox.insert("end", s)
-        self.outbox["state"] = tkinter.DISABLED
-        self.outbox.yview_moveto(1)    # 最終行にスクロール
-    
+        self.textbox_manager.write("out", s)
+
     def outputClear(self):
-        self.outbox["state"] = tkinter.NORMAL
-        self.outbox.delete("0.0", "end")
-        self.outbox["state"] = tkinter.DISABLED
-        self.outbox.yview_moveto(0)    # 先頭にスクロール
+        self.textbox_manager.clear("out")
+    
+
+    # 追加機能：Outputのフォントサイズ変更
+    def increaseFontSize(self, event):
+        current_size = self.font_outbox['size']
+        self.font_outbox.configure(size=current_size + 1)
+    def decreaseFontSize(self, event):
+        current_size = self.font_outbox['size']
+        self.font_outbox.configure(size=current_size - 1)
 
 
-    def assemble(self):
-        data = self.codebox.get("1.0", "end-1c")    # 全て文字列で返る。endだと最後の改行文字まで受け取ってしまうので -1c
-        data = data.split("\n")                     # 改行文字で配列化 -> 行単位
+    # 実行関係
+    def assemble(self) -> int:
+        data = self.textbox_manager.getText("code")
+        data = data.split("\n")              # 改行文字で配列化 -> 行単位
+        data = data[:-1]                     # 最後の改行文字（空行）まで受け取ってしまうので、-1
 
+        memory = ""
         isError = False
         try:
             memory = self.CPU.write(data)
-            self.buttonSetting('able')
+            self.buttonSetting(tkinter.NORMAL)
+            self.filemenu.entryconfig("メモリダンプ(binary)を保存", state=tkinter.NORMAL)
         except Exception as e:
             isError = True
             memory = "Error\n" + str(e)
-            self.buttonSetting('disable')
+            self.buttonSetting(tkinter.DISABLED)
+            self.filemenu.entryconfig("メモリダンプ(binary)を保存", state=tkinter.DISABLED)
         
         self.clearHighlight()
         self.outputClear()
         self.infoClear()
         self.memClear()
         self.memWrite(memory, 0)
+
+        if isError: return -1
+
+        self.CPUexecution.reset()
         self.updateRegs()
         self.changeButton('run')
-        self.step = 0
-
-        if isError: return
-
         self.makeDiagram()
+        return 0
 
     # CPUモデル図を子ウィンドウで作成
     def makeDiagram(self):
         if not(self.showDiagram.get()):
-            self.button_diagram["state"] = tkinter.DISABLED
+            self.buttons["diagram"]["state"] = tkinter.DISABLED
             return
         try:
             if self.diagram_window.winfo_exists():
@@ -236,121 +482,44 @@ class Window(tkinter.Tk):
 
     def changeButton(self, state: str):
         if state == 'stop':
-            self.button_execute['text'] = '||'
-            self.button_execute['command'] = self.pause
+            self.buttons["execute"]['text'] = '||'
+            self.buttons["execute"]['command'] = self.pause
         elif state == 'run':
-            self.button_execute['text'] = '▶'
-            self.button_execute['command'] = lambda: self.execute(1)
+            self.buttons["execute"]['text'] = '▶'
+            self.buttons["execute"]['command'] = lambda: self.execute(1)
     
     def pause(self):
-        self.isRunning = False
+        self.CPUexecution.is_running = False
         self.changeButton('run')
 
-    isInput = False     # staticな変数。IN命令かどうか
-    isRunning = False   # 同上。executeしているかどうか
     def execute(self, tp: ExecType):
         # 実行。try-except でCPU内での実行時エラーを受け取る
         try:
-            # 最速で実行する場合
-            if tp == ExecType.FAST:
-                self.execFast()
-            # 最後まで実行する場合
-            elif tp == ExecType.ALL:
-                self.isRunning = True
-                self.isInput = False
+            if tp == ExecType.FAST or tp == ExecType.ALL:
                 self.changeButton('stop')
-                self.execAll()
-            #ステップ実行の場合
-            else:
-                self.execStep(tp)
+            self.CPUexecution.execute(tp)
         except Exception as e:
             self.infoAdd(f"*****異常*****\n{repr(e)}")
-            self.buttonSetting('disable')
-    
-    def execFast(self):
-        # 終わるまでとにかくwhileで実行し続ける
-        eRet = 0
-        while True:
-            if not(self.isInput):
-                self.CPU.fetch()
-                ret = self.CPU.decode()
-                if ret == 1:
-                    self.promptInput()
-                    break
-            self.isInput = False
-            eRet = self.CPU.execute()
-            if eRet != 0:
-                break
-        self.updateExecute(eRet)
-    
-    ret = 0
-    def execAll(self):
-        # whileにすると 終了まで画面が固まってしまうので、tkinter.after()で指定時間後に実行を繰り返す
-        if not(self.isRunning):
-            return
-        if not(self.isInput):
-            self.execStep(ExecType.ALL)
-        if self.ret == 0:
-            # 200ミリ秒後に次の命令を実行
-            self.after(200, self.execAll)
-        else:
+            self.buttonSetting(tkinter.DISABLED)
+
+    def exec_step_diagram(self, step: Step):
+        if self.diagram_window is None or not self.diagram_window.winfo_exists():
             return
 
-    def execStep(self, tp: ExecType):
-        if tp != ExecType.ALL:
-            self.button_fast["state"] = tkinter.DISABLED
-            self.button_execute["state"] = tkinter.DISABLED
-
-        if self.step == Step.IR_FETCH:
-            self.CPU.fetch()
-            self.updateFetch()
-            if self.diagram_window is not None and self.diagram_window.winfo_exists():
-                self.diagram_window.readIR()
-            self.step += 1
-            if tp == ExecType.DIAGRAM: return
-
-        if self.step == Step.FETCH:
-            if self.diagram_window is not None and self.diagram_window.winfo_exists():
-                self.diagram_window.increPC()
-            self.step += 1
-            if tp == ExecType.DIAGRAM or tp == ExecType.STEPIN: return
-
-        if self.step == Step.DECODE:
-            self.ret = self.CPU.decode()
-            self.updateDecode()
-            if self.diagram_window is not None and self.diagram_window.winfo_exists():
-                self.diagram_window.decode()
-            self.step += 1
-            if self.ret == 1:
-                self.promptInput()
-                return
-            if tp == ExecType.DIAGRAM or tp == ExecType.STEPIN: return
-
-        if self.step == Step.DATA_READY:
-            self.ret = self.CPU.execute()
-            self.isInput = False
-            if self.diagram_window is not None and self.diagram_window.winfo_exists():
-                self.diagram_window.readReady()
-            self.step += 1
-            if tp == ExecType.DIAGRAM: return
-
-        if self.step == Step.DATA_FETCH:
-            if self.diagram_window is not None and self.diagram_window.winfo_exists():
-                self.diagram_window.dataFetch()
-            self.step += 1
-            if tp == ExecType.DIAGRAM: return
-
-        if self.step == Step.ACCUMLATE:
-            if self.diagram_window is not None and self.diagram_window.winfo_exists():
-                self.diagram_window.accumulate()
-            self.step += 1
-            if tp == ExecType.DIAGRAM: return
-
-        if self.diagram_window is not None and self.diagram_window.winfo_exists():
+        if step == Step.IR_FETCH:
+            self.diagram_window.readIR()
+        elif step == Step.FETCH:
+            self.diagram_window.increPC()
+        elif step == Step.DECODE:
+            self.diagram_window.decode()
+        elif step == Step.DATA_READY:
+            self.diagram_window.readReady()
+        elif step == Step.DATA_FETCH:
+            self.diagram_window.dataFetch()
+        elif step == Step.ACCUMLATE:
+            self.diagram_window.accumulate()
+        elif step == Step.EXECUTE:
             self.diagram_window.writeback()
-        self.button_fast["state"] = tkinter.NORMAL
-        self.button_execute["state"] = tkinter.NORMAL
-        self.updateExecute(self.ret)
     
     def promptInput(self):
         self.infoAdd("\n**ユーザ入力を行って実行を継続してください**\n")
@@ -376,11 +545,11 @@ class Window(tkinter.Tk):
             return
         elif ret == 1:
             self.infoAdd("*****最後まで実行されました*****")
-            self.buttonSetting('disable')
+            self.buttonSetting(tkinter.DISABLED)
             return
         else:
             self.infoAdd("*****異常終了*****")
-            self.buttonSetting('disable')
+            self.buttonSetting(tkinter.DISABLED)
             return
     
     def updateRegs(self):

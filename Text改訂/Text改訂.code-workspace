@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"markdown-pdf.styles": ["./markdown-css.css"],
+		"markdown-pdf.margin.top": "1cm",
+		"markdown-pdf.margin.left": "0.5cm",
+		"markdown-pdf.margin.right": "0.5cm",
+		"markdown-pdf.margin.bottom": "0.5cm"
+	}
+}

@@ -126,6 +126,9 @@ class CPUDiagram(tk.Toplevel):
         self.memory_w = Memory(self.canvas, 820, 470)
         self.memory_sp = Memory(self.canvas, 820, 540)
 
+        self.enzanshi = self.canvas.create_text(461, 344, text="", font=("Cascadia Code", 15), fill='green')
+        self.AriORLog = self.canvas.create_text(461, 360, text="", font=("Cascadia Code", 11), fill='green')
+
         self.state = self.canvas.create_text(785, 590, text="State : init")
 
         self.canvas.create_text(140, 215, text="GR", font=("Cascadia Code", 11))
@@ -136,7 +139,8 @@ class CPUDiagram(tk.Toplevel):
         # 線（接続の可視化）
         reg1 = (270, 240)
         reg2 = (270, 275)
-        regm = (270, 470)
+        regmr = (270, 300)
+        regmw = (270, 470)
         addr = (550, 200)
         alul = (350, 310)
         alur = (550, 310)
@@ -144,19 +148,19 @@ class CPUDiagram(tk.Toplevel):
         nodesp = (650, 310)
         gr = (15, 365)
         self.lines = {
-            "pc-memory": [self.canvas.create_line(174, 60, 675, 60, fill="gray", width=2)],
-            "memory-ir": [self.canvas.create_line(675, 60, 455, 100, fill="gray", width=2),
-                          self.canvas.create_line(675, 90, 455, 100, fill="gray", width=2)],
-            "ir-decoder": [self.canvas.create_line(340, 130, 330, 150, fill="gray", width=2),
-                           self.canvas.create_line(393, 130, 395, 150, fill="gray", width=2),
-                           self.canvas.create_line(430, 130, 440, 150, fill="gray", width=2),
-                           self.canvas.create_line(500, 130, 540, 150, fill="gray", width=2)]}
+            "pc-memory": [self.canvas.create_line(174, 60, 675, 60, fill="", width=0, arrow=tk.LAST, arrowshape=(16, 20, 6))],
+            "memory-ir0": [self.canvas.create_line(670, 60, 460, 90, fill="", width=0, arrow=tk.LAST, arrowshape=(16, 20, 6))],
+            "memory-ir1": [self.canvas.create_line(675, 90, 460, 90, fill="", width=0, arrow=tk.LAST, arrowshape=(16, 20, 6))],
+            "ir-decoder": [self.canvas.create_line(340, 130, 330, 150, fill="gray", width=0, arrow=tk.LAST, arrowshape=(8, 10, 6)),
+                           self.canvas.create_line(393, 130, 395, 150, fill="gray", width=0, arrow=tk.LAST, arrowshape=(8, 10, 6)),
+                           self.canvas.create_line(430, 130, 440, 150, fill="gray", width=0, arrow=tk.LAST, arrowshape=(8, 10, 6)),
+                           self.canvas.create_line(500, 130, 540, 150, fill="gray", width=0, arrow=tk.LAST, arrowshape=(8, 10, 6))]}
         self.lines_execute = {
-            "opr1-gr": [self.canvas.create_line(395, 200, reg1,     fill="gray", width=2)],
-            "opr2-gr": [self.canvas.create_line(440, 200, reg2,     fill="gray", width=2)],
-            "addr-memory_r": [self.canvas.create_line(addr,     675, 250,fill="gray", width=2)],
-            "addr-memory_w": [self.canvas.create_line(addr,     nodesp,fill="gray", width=2),
-                              self.canvas.create_line(nodesp,   675, 470,fill="gray", width=2)],
+            "opr1-gr": [self.canvas.create_line(395, 200, reg1,     fill="green", width=2)],
+            "opr2-gr": [self.canvas.create_line(440, 200, reg2,     fill="green", width=2)],
+            "addr-memory_r": [self.canvas.create_line(addr,     675, 250,fill="green", width=2)],
+            "addr-memory_w": [self.canvas.create_line(addr,     nodesp,fill="green", width=2),
+                              self.canvas.create_line(nodesp,   675, 470,fill="green", width=2)],
             "addr-pc": [self.canvas.create_line(addr,     550, 210, fill="green", width=2),
                         self.canvas.create_line(550, 210, 140, 210, fill="green", width=2),
                         self.canvas.create_line(140, 210, 140, 75, fill="green", width=2)],
@@ -165,7 +169,7 @@ class CPUDiagram(tk.Toplevel):
             "memory-alu": [self.canvas.create_line(675, 250, alur,   fill="green", width=2)],
             "val-alu": [self.canvas.create_line(addr,     alur,    fill="green", width=2)],
             "val-sp": [self.canvas.create_line(addr,     nodesp, fill="green", width=2)],
-            "val-gr": [self.canvas.create_line(addr,     reg2,   fill="green", width=2)],
+            "val-gr": [self.canvas.create_line(addr,     regmr,   fill="green", width=2)],
             "reg1-alu": [self.canvas.create_line(270, 240, alul,     fill="green", width=2)],
             "reg2-alu": [self.canvas.create_line(270, 275, alur,     fill="green", width=2)],
             "reg1-sp": [self.canvas.create_line(270, 240, nodesp,   fill="green", width=2)],
@@ -179,16 +183,18 @@ class CPUDiagram(tk.Toplevel):
                           self.canvas.create_line(820, 580, 15, 580, fill="green", width=2),
                           self.canvas.create_line(15, 580, 15, 60, fill="green", width=2),
                           self.canvas.create_line(15, 60, 108, 60, fill="green", width=2)],
-            "memory-gr": [self.canvas.create_line(675, 250, reg2,   fill="green", width=2)],
+            "memory_r-opr2": [self.canvas.create_line(675, 250, reg2,   fill="green", width=2)],
+            "memory_r-gr": [self.canvas.create_line(675, 250, regmr,   fill="green", width=2)],
             "memory_w-gr": [self.canvas.create_line(675, 470, nodesp,   fill="green", width=2)],
-            "memst-memory": [self.canvas.create_line(regm,  675, 470, fill="green", width=2)],
+            "memst-memory": [self.canvas.create_line(regmw,  675, 470, fill="green", width=2)],
             "gr-gr": [self.canvas.create_line(0,0,0,0,fill="", width=0)]
-        } | {"opr1-gr"+str(i) : [self.canvas.create_line(reg1, 220, 240 + i*35, fill="blue", width=2)] for i in range(8)} \
-          | {"opr2-gr"+str(i) : [self.canvas.create_line(reg2, 220, 240 + i*35, fill="blue", width=2)] for i in range(8)} \
+        } | {"opr1-gr"+str(i) : [self.canvas.create_line(reg1, 220, 240 + i*35, fill="green", width=2)] for i in range(8)} \
+          | {"opr2-gr"+str(i) : [self.canvas.create_line(reg2, 220, 240 + i*35, fill="green", width=2)] for i in range(8)} \
+          | {"memr-gr"+str(i) : [self.canvas.create_line(regmr, 220, 240 + i*35, fill="green", width=2)] for i in range(8)} \
           | {"acc-gr"+str(i)  : [self.canvas.create_line(gr,   40, 240 + i*35, fill="green", width=2)] for i in range(8)} \
-          | {"memst-gr"+str(i)  : [self.canvas.create_line(regm,   220, 240 + i*35, fill="green", width=2)] for i in range(8)}
+          | {"memst-gr"+str(i)  : [self.canvas.create_line(regmw,   220, 240 + i*35, fill="green", width=2)] for i in range(8)}
 
-        self.lightupExec()
+        self.undoColor()
     
     def on_close(self):
         self.master.diagram_window = None   # 親ウィンドウの参照をNoneにする
@@ -196,14 +202,16 @@ class CPUDiagram(tk.Toplevel):
 
     def readIR(self):
         self.updateState("IR_fetch")
-        self.highlight("pc-memory", "red")
-        self.highlight("memory-ir", "red")
-        self.lightupExec()
         self.undoColor()
+        self.highlight("pc-memory", "red")
+        self.highlight("memory-ir0", "red")
 
         pcAddr = self.cpu.getNowPC()
+        self.isRegOP = self.cpu.isRegisterOP(self.cpu.IR[0:8])
         self.memory_pc.update(pcAddr, self.cpu.getAddressValue(pcAddr), pink)
-        self.memory_pc1.update(pcAddr+1, self.cpu.getAddressValue(pcAddr+1), pink)
+        if not self.isRegOP:
+            self.memory_pc1.update(pcAddr+1, self.cpu.getAddressValue(pcAddr+1), pink)
+            self.highlight("memory-ir1", "red")
         self.ir.update(self.cpu.IR, digit=32)
         self.pc.changeColor(pink)
     
@@ -222,69 +230,94 @@ class CPUDiagram(tk.Toplevel):
     
     def readReady(self):
         self.updateState("Data_ready")
-        self.isRegOP = self.cpu.isRegisterOP(self.op)
-        # OP 形式の命令 (# NOP, RET, SVC)。まだやることが無い
+        # OP 形式の命令 (NOP, RET, SVC)。まだやることが無い
         if self.op == "00000000" or self.op == "10000001" or self.op == "11110000":
             return
-        elif self.op == "01110000" or self.op == "10000000":    # OP addr [,x] 形式。PUSH, CALL
+        # OP addr [,x] 形式。JUMP系0x6_, CALL
+        # OP val  [,x] 形式のPUSH も今は共通
+        elif self.op[:4] == "0110" or self.op == "01110000" or self.op == "10000000":    
             if self.r2 == 0:    return
-            self.lightupExec(["opr2-gr", "opr2-gr"+str(self.r2)])
+            self.lightupExec(["opr2-gr", "opr2-gr"+str(self.r2)], color='blue')
+            self.setArrowHead("opr2-gr"+str(self.r2), tk.LAST)
+        # OP r, まで確定
         else:
-            self.lightupExec(["opr1-gr", "opr1-gr"+str(self.r1)])
+            # OP r
+            self.lightupExec(["opr1-gr", "opr1-gr"+str(self.r1)], color='blue')
+            self.setArrowHead("opr1-gr"+str(self.r1), tk.LAST)
+            # OP r, r 形式
             if self.isRegOP:
-                self.lightupExec(["opr2-gr", "opr2-gr"+str(self.r2)])
-            elif self.op[:4] == "0101":  # シフト命令系
+                self.lightupExec(["opr2-gr", "opr2-gr"+str(self.r2)], color='blue')
+                self.setArrowHead("opr2-gr"+str(self.r2), tk.LAST)
+            # OP r, addr [,x] 形式。LD と ST はメモリに伸ばすので特別
+            elif self.op not in ["00010000", "00010100", "00010001"]:
+                if self.r2 == 0:    return
+                self.lightupExec(["opr2-gr", "opr2-gr"+str(self.r2)], color='blue')
+                self.setArrowHead("opr2-gr"+str(self.r2), tk.LAST)
                 return
-            elif self.op == "00010010" or self.op[:4] == "0110":    # val系
-                return
+            # LD, ST
             else:
                 if self.op == "00010001": # ST
-                    self.lightupExec(["addr-memory_w"])
+                    self.lightupExec(["addr-memory_w"], color='blue')
+                    self.setArrowHead("addr-memory_w", 1, tk.LAST)
                     self.memory_w.update(self.cpu.getAddress(), self.cpu.getAddressValue(), color="")
                     if self.r2 == 0: return
-                    self.lightupExec(["opr2-gr"+str(self.r2), "memory_w-gr"])
-                else:
-                    self.lightupExec(["addr-memory_r"])
+                    self.lightupExec(["opr2-gr"+str(self.r2), "memory_w-gr"], color='blue')
+                    self.setArrowHead("memory_w-gr", tk.FIRST)
+                else: # LD
+                    self.lightupExec(["addr-memory_r"], color='blue')
+                    self.setArrowHead("addr-memory_r", tk.LAST)
                     self.memory_r.update(self.cpu.getAddress(), self.cpu.getAddressValue(), color="")
                     if self.r2 == 0: return
-                    self.lightupExec(["opr2-gr"+str(self.r2), "memory-gr"])
-                self.lightupExec(["opr2-gr", "opr2-gr"+str(self.r2)])
+                    self.lightupExec(["opr2-gr"+str(self.r2), "memory_r-opr2"], color='blue')
+                    self.setArrowHead("memory_r-opr2", tk.FIRST)
+                self.lightupExec(["opr2-gr", "opr2-gr"+str(self.r2)], color='blue')
 
     def dataFetch(self):
         self.updateState("Data_fetch")
         # NOP or SVC or 0x6(JUMP)
         if self.op == "00000000" or self.op == "11110000" or self.op[:4] == "0110":
             return
-        elif self.op[:4] == "0111" or self.op[:4] == "1000":  # PUSH, POP, CALL, RET
-            if self.op[4:] == "0000":    # OP addr [,x] 形式。PUSH, CALL
+        # スタック使う系。PUSH, POP, CALL, RET (0x7, 0x8)
+        elif self.op[:4] == "0111" or self.op[:4] == "1000":
+            self.lightupExec(["val-sp", "sp-spm"])
+            self.setArrowHead("sp-spm", 0, tk.LAST)
+            self.setArrowHead("sp-spm", 1, tk.LAST)
+            self.updateSP(color=pink)
+            # OP addr [,x] 形式。PUSH, CALL (0x7)
+            if self.op[4:] == "0000":
                 if self.r2 == 0:    return
                 self.gr[self.r2].changeColor(pink)
-            self.lightupExec(["val-sp", "sp-spm"])
-            self.updateSP(color=pink)
-        elif self.op[:4] == "0001": # LD, ST, LAD
-            if self.op[5] == "1":   # LD gr, gr
+        # LD, ST, LAD
+        elif self.op[:4] == "0001":
+            if self.r2 != 0:
                 self.gr[self.r2].changeColor(pink)
-            else:
-                if self.op == "00010000":   # LD
-                    self.memory_r.changeColor(pink)
-                elif self.op == "00010001": # ST
-                    self.gr[self.r1].changeColor(pink)
-                if self.r2 == 0: return
-                self.gr[self.r2].changeColor(pink)
-        else:
+            # LD r, addr
+            if self.op == "00010000":
+                self.memory_r.changeColor(pink)
+            # ST
+            elif self.op == "00010001":
+                self.gr[self.r1].changeColor(pink)
+        else: # ALUを使うやつ
             self.lightupExec()  # 線がごちゃごちゃするので、readyの線を消す
+            self.setArrowHead("opr1-gr"+str(self.r1), tk.NONE)
+            self.setArrowHead("opr2-gr"+str(self.r2), tk.NONE)
+
             self.alu_l.update(self.cpu.ALU_A)
             self.alu_r.update(self.cpu.ALU_B)
             self.gr[self.r1].changeColor(pink)
             self.lightupExec(["opr1-gr"+str(self.r1), "reg1-alu"])
+            self.setArrowHead("reg1-alu", tk.LAST)
             if self.isRegOP:
                 self.gr[self.r2].changeColor(pink)
                 self.lightupExec(["opr2-gr"+str(self.r2), "reg2-alu"])
-            elif self.op[:4] == "0101":  # シフト命令系
+                self.setArrowHead("reg2-alu", tk.LAST)
+            elif self.op[:4] == "0101":  # val 系。シフト命令
                 self.lightupExec(["val-alu"])
+                self.setArrowHead("val-alu", tk.LAST)
             else:
                 self.memory_r.changeColor(pink)
                 self.lightupExec(["memory-alu"])
+                self.setArrowHead("memory-alu", tk.LAST)
                 if self.r2 == 0:    return
                 self.gr[self.r2].changeColor(pink)
     
@@ -292,47 +325,85 @@ class CPUDiagram(tk.Toplevel):
         self.updateState("Accumulate")
         # ALU使わない系。NOP, 0x1(LD, ST, LAD), 0x6(JUMP), 0x7(PUSH, POP), 0x8(CALL, RET), SVC
         if self.op == "00000000" or self.op == "11110000" or \
-            self.op[:4] == "0001" or self.op[:4] == "0110" or self.op[:4] == "0111" or self.op[:4] == "1000":
+                self.op[:4] == "0001" or self.op[:4] == "0110" or self.op[:4] == "0111" or self.op[:4] == "1000":
+            self.updateALUop("", "")
             return
         else:
             self.lightupExec(["alu-acc"])
             self.acc.update(self.cpu.Acc)
+            if   self.op in ["00100000", "00100100"]: self.updateALUop("+", "A")
+            elif self.op in ["00100001", "00100101"]: self.updateALUop("-", "A")
+            elif self.op in ["00100010", "00100110"]: self.updateALUop("+", "L")
+            elif self.op in ["00100011", "00100111"]: self.updateALUop("-", "L")
+            elif self.op in ["00110000", "00110100"]: self.updateALUop("&", "")
+            elif self.op in ["00110001", "00110101"]: self.updateALUop("|", "")
+            elif self.op in ["00110010", "00110110"]: self.updateALUop("^", "")
+            elif self.op in ["01000000", "01000100"]: self.updateALUop("?-", "A")
+            elif self.op in ["01000001", "01000101"]: self.updateALUop("?-", "L")
+            elif self.op == "01010000": self.updateALUop("<<", "A")
+            elif self.op == "01010001": self.updateALUop(">>", "A")
+            elif self.op == "01010010": self.updateALUop("<<", "L")
+            elif self.op == "01010011": self.updateALUop(">>", "L")
+            
     
     def writeback(self):
         self.updateState("Write_back")
         if self.op == "00000000" or self.op == "11110000":    # NOP or SVC
             return
-        elif self.op[:4] == "0110":  # JUMP系
-            self.lightupExec(["memory-pc"])
+        elif self.op[:4] == "0110" and self.cpu.is_jump:  # JUMP系
+            self.lightupExec(["addr-pc"])
+            self.setArrowHead("addr-pc", 2, tk.LAST)
             self.pc.update(self.cpu.PC)
         elif self.op[:4] == "0111":  # PUSH, POP
             self.updateSP()
         elif self.op[:4] == "1000":  # CALL, RET
             self.lightupExec(["memory-pc"])
+            self.setArrowHead("memory-pc", 3, tk.LAST)
             self.pc.update(self.cpu.PC)
             self.updateSP()
         else:
             num = self.r1
             if self.op == "00010001":   # ST
                 self.lightupExec(["memst-memory", "memst-gr"+str(num)])
+                self.setArrowHead("memst-gr"+str(num), tk.LAST)
                 self.memory_w.update(self.adr, self.cpu.getAddressValue(self.adr))
             elif self.op == "00010010":  # LAD
-                self.lightupExec(["val-gr", "opr2-gr"+str(num)])
+                self.lightupExec(["val-gr", "memr-gr"+str(num)])
+                self.setArrowHead("memr-gr"+str(num), tk.LAST)
                 self.gr[num].update(self.cpu.GR[num])
+                if self.r2 != 0:
+                    self.createGRtoGR()
             else:
                 self.fr.update(self.cpu.FR, digit=3)
                 self.gr[num].update(self.cpu.GR[num])
                 if self.op == "00010000":   # LD gr, addr
-                    self.lightupExec(["memory-gr", "opr2-gr"+str(self.r1)])
+                    self.lightupExec(["memory_r-gr", "memr-gr"+str(self.r1)])
+                    self.setArrowHead("memr-gr"+str(self.r1), tk.LAST)
                 elif self.op == "00010100": # LD gr, gr
-                    self.lines_execute["gr-gr"] = [self.canvas.create_line(40, 240 + self.r1*35, 15, 240 + self.r1*35, fill="green", width=4),
-                                                   self.canvas.create_line(15, 240 + self.r1*35, 15, 240 + self.r2*35, fill="green", width=4),
-                                                   self.canvas.create_line(15, 240 + self.r2*35, 40, 240 + self.r2*35, fill="green", width=4)]
+                    self.createGRtoGR()
                 else:
                     self.lightupExec(["acc-fr", "acc-gr", "acc-gr"+str(self.r1)])
+                    self.setArrowHead("acc-fr", tk.LAST)
+                    self.setArrowHead("acc-gr"+str(self.r1), tk.LAST)
     
+    def createGRtoGR(self):
+        if self.r1 == self.r2:
+            self.lines_execute["gr-gr"] = [self.canvas.create_line(40, 245 + self.r2*35, 15, 245 + self.r2*35, fill="green", width=4),
+                                           self.canvas.create_line(15, 245 + self.r2*35, 15, 235 + self.r1*35, fill="green", width=4),
+                                           self.canvas.create_line(15, 235 + self.r1*35, 40, 235 + self.r1*35, fill="green", width=4)]
+        else:
+            self.lines_execute["gr-gr"] = [self.canvas.create_line(40, 240 + self.r2*35, 15, 240 + self.r2*35, fill="green", width=4),
+                                           self.canvas.create_line(15, 240 + self.r2*35, 15, 240 + self.r1*35, fill="green", width=4),
+                                           self.canvas.create_line(15, 240 + self.r1*35, 40, 240 + self.r1*35, fill="green", width=4)]
+        self.setArrowHead("gr-gr", 2, tk.LAST)
+
+
     def updateState(self, text):
         self.canvas.itemconfig(self.state, text="State : " + text)
+
+    def updateALUop(self, text, AL):
+        self.canvas.itemconfig(self.enzanshi, text=text)
+        self.canvas.itemconfig(self.AriORLog, text=AL)
 
     def updateSP(self, color=bg):
         spval = self.cpu.SP
@@ -345,9 +416,9 @@ class CPUDiagram(tk.Toplevel):
 
     def highlight(self, linename, color):
         for l in self.lines[linename]:
-            self.canvas.itemconfig(l, fill=color, width=(4 if color!="gray" else 2))
+            self.canvas.itemconfig(l, fill=color, width=4)
     
-    def lightupExec(self, actives=None):
+    def lightupExec(self, actives=None, color="green"):
         if actives is None:
             for _, l in self.lines_execute.items():
                 for val in l:
@@ -355,9 +426,27 @@ class CPUDiagram(tk.Toplevel):
         else:
             for name in actives:
                 for l in self.lines_execute[name]:
-                    self.canvas.itemconfig(l, fill="green", width=4)
+                    self.canvas.itemconfig(l, fill=color, width=4)
+    
+    def setArrowHead(self, linename, *args):
+        if len(args) == 1:
+            direction = args[0]
+            lineID = self.lines_execute[linename][0]
+        elif len(args) == 2:
+            index, direction = args
+            lineID = self.lines_execute[linename][index]
+        else:
+            raise TypeError("setArrowHead() takes 2 or 3 arguments")
+        self.canvas.itemconfig(lineID, arrow=direction)
+        self.canvas.itemconfig(lineID, arrowshape=(16, 20, 6))
+
 
     def undoColor(self):
+        self.highlight("pc-memory", "")
+        self.highlight("memory-ir0", "")
+        self.highlight("memory-ir1", "")
+        self.highlight("ir-decoder", "")
+        self.lightupExec()
         for gr in self.gr:
             gr.changeColor("")
         self.pc.changeColor("")

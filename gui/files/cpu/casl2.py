@@ -30,18 +30,24 @@ class CASL2(CPU):
         "SVC": 0xF0
     }
 
-    DICT_PCROW = {} # {メモリアドレス : コードの行番号}
+    DICT_AddrRow = {} # {メモリアドレス : コードの行番号}
 
 
     def __init__(self) -> None:
         super().__init__()
+
+    def isGR(self, opr: str, isXR=False) -> bool:
+        if len(opr) < 3:    return False
+        if isXR:
+            return (opr[0:2] == "GR" and utils.isnum(opr[2:]) and 1 <= int(opr[2:]) < self.REGISTER_NUM)
+        return (opr[0:2] == "GR" and utils.isnum(opr[2:]) and 0 <= int(opr[2:]) < self.REGISTER_NUM)
 
     def assemble(self, data: str) -> str:
         '''
         構文チェックと機械語変換を行う
 
         1. 初めの命令が STARTか
-        2. 全走査し、ラベル名を self.self.labels に格納
+        2. 全走査し、ラベル名を self.labels に格納
         3. END命令が存在するか
         4. 逐次、命令を機械語に変換
         5. ラベル名とアドレスの対応付け
@@ -80,7 +86,7 @@ class CASL2(CPU):
         # オペランドがレジスタだった時のアセンブルをする関数 
         def setRegister(opr) -> None:
             nonlocal address, index
-            if opr[0:2] == "GR" and utils.isnum(opr[2:]) and 0 <= int(opr[2:]) < self.REGISTER_NUM:
+            if self.isGR(opr):
                 # レジスタ番号の4bit化
                 self.MEM[address] += f"{int(opr[2:]):04b}"
             else:
@@ -113,7 +119,7 @@ class CASL2(CPU):
             # ある場合
             else:
                 # GR0 は指標レジスタにならない
-                if xr[0:2] == "GR" and utils.isnum(xr[2:]) and 1 <= int(xr[2:]) < self.REGISTER_NUM:
+                if self.isGR(xr, True):
                     self.MEM[address-1] += f"{int(xr[2:]):04b}"
                 else:
                     raise exceptions.InvalidRegister(index+1, xr)
@@ -141,6 +147,7 @@ class CASL2(CPU):
             if mnem not in self.MNEMONIC:
                 raise exceptions.InvalidMnemonic(index+1)
             op = f"{self.MNEMONIC[mnem]:08b}"
+            mainOP = int(op[0:4], 2)
             self.MEM[address] = op
 
             # オペランドたちの処理
@@ -160,25 +167,29 @@ class CASL2(CPU):
                 # レジスタ部2 に 0x0 を入れる
                 self.MEM[address] += "0000"
 
-            # r1 r2  |  r, adr, xr  -> 主OP: 1~5, 9
-            elif 1 <= int(op[0:4],2) <= 5 or int(op[0:4],2) == 9:
-                if len(words) < 4:
+            # r, val, xr -> shift系（主OP: 5）
+            elif mainOP == 5:
+                if not(4 <= len(words) <= 5) or self.isGR(words[3]):
                     raise exceptions.InvalidOperand(index+1)
                 setRegister(words[2])
-                xr = ""
-                try: xr = words[4]
-                except: 0
+                xr = words[4] if len(words) == 5 else "" # 指標レジスタが無ければ ""
+                setRegOrAddr(words[3], xr)
+
+            # r1 r2  |  r, adr, xr  -> 主OP: 1~5, 9
+            elif 1 <= mainOP <= 5 or mainOP == 9:
+                if not(4 <= len(words) <= 5):
+                    raise exceptions.InvalidOperand(index+1)
+                setRegister(words[2])
+                xr = words[4] if len(words) == 5 else "" # 指標レジスタが無ければ ""
                 setRegOrAddr(words[3], xr)
 
             # adr, xr
             else:
-                if len(words) < 3:
+                if not(3 <= len(words) <= 4):
                     raise exceptions.InvalidOperand(index+1)
                 self.MEM[address] += "0000"
                 address += 1
-                xr = ""
-                try: xr = words[3]
-                except: 0
+                xr = words[3] if len(words) == 4 else "" # 指標レジスタが無ければ ""
                 setAddress(words[2], xr)
 
         # --------------------
@@ -221,7 +232,7 @@ class CASL2(CPU):
             if address > self.MEMLEN:
                 raise exceptions.BoundMemory(self.MEMLEN)
 
-            self.DICT_PCROW[address] = index + 1
+            self.DICT_AddrRow[address] = index + 1
             
             # 空行の場合
             if len(words) == 0:
@@ -281,7 +292,7 @@ class CASL2(CPU):
 
                 for words in orders:
                     # 行番号を登録
-                    self.DICT_PCROW[address] = index + 1
+                    self.DICT_AddrRow[address] = index + 1
                     # 機械語命令を機械語に変換
                     toMachine(words)
                     address += 1
@@ -332,6 +343,7 @@ class CASL2(CPU):
 
     def execute(self) -> int:
         self.msg = ""
+        self.is_jump = False
 
         op = self.DEC[0]                     # オペコード
         mnem = self.getMnemonic(op)          # ニーモニック
@@ -376,8 +388,10 @@ class CASL2(CPU):
 
         # 論理命令  r1 r2,  r1 adr [xr]
         elif mnem in ["AND", "OR", "XOR"]:
-            v1 = list(utils.binary(opr1))
-            v2 = list(utils.binary(opr2))
+            self.ALU_A = utils.binary(opr1)
+            self.ALU_B = utils.binary(opr2)
+            v1 = list(self.ALU_A)
+            v2 = list(self.ALU_B)
             if mnem == "AND":
                 self.drawHissan(opr1, opr2, "&")
                 bit = ['1' if v1[i] == v2[i] == '1' else '0' for i in range(self.REGBIT)]
@@ -387,10 +401,11 @@ class CASL2(CPU):
             else:
                 self.drawHissan(opr1, opr2, "^")
                 bit = ['1' if v1[i] != v2[i] else '0' for i in range(self.REGBIT)]
-            val = utils.binToValue(bit, (opr1 < 0 or opr2 < 0))
-            self.msg += f"  {utils.binary(val)}   ({val})"
 
+            val = utils.binToValue(bit, (opr1 < 0 or opr2 < 0))
+            self.Acc = val
             self.GR[r1_num] = val
+            self.msg += f"  {utils.binary(val)}   ({val})"
             self.setFlag(val)
 
 
@@ -424,28 +439,27 @@ class CASL2(CPU):
 
 
         # ジャンプ命令  adr [xr]
-        elif mnem in ["JUMP", "JPL", "JMI", "JNZ", "JZE", "JOV"]:            
-            isjump = False
+        elif mnem in ["JUMP", "JPL", "JMI", "JNZ", "JZE", "JOV"]:
             if mnem == "JUMP":
                 self.msg = "JUMP"
-                isjump = True
+                self.is_jump = True
             elif mnem == "JPL":
                 self.msg = "SF = 0, ZF = 0"
-                if not(self.FR & self.SIGN_FLAG or self.FR & self.ZERO_FLAG):  isjump = True
+                if not(self.FR & self.SIGN_FLAG or self.FR & self.ZERO_FLAG):  self.is_jump = True
             elif mnem == "JMI":
                 self.msg = "SF = 1"
-                if self.FR & self.SIGN_FLAG: isjump = True
+                if self.FR & self.SIGN_FLAG: self.is_jump = True
             elif mnem == "JNZ":
                 self.msg = "ZF ≠ 1"
-                if not(self.FR & self.ZERO_FLAG): isjump = True
+                if not(self.FR & self.ZERO_FLAG): self.is_jump = True
             elif mnem == "JZE":
                 self.msg = "ZF = 1"
-                if self.FR & self.ZERO_FLAG: isjump = True
+                if self.FR & self.ZERO_FLAG: self.is_jump = True
             else:
                 self.msg = "OF = 1"
-                if self.FR & self.OVERFLOW_FLAG: isjump = True
+                if self.FR & self.OVERFLOW_FLAG: self.is_jump = True
             
-            if isjump:
+            if self.is_jump:
                 self.msg += f" なので、0x{addr:04X}にジャンプします\n"
                 self.PC = addr
                 return 0
@@ -499,12 +513,14 @@ class CASL2(CPU):
                     self.msg = "Error: 文字長が 0以下 です\n"
                     return -1
                 svc.svc_in(self.GR[1], length, addr)
+                self.msg = "スーパーバイザーコール。OSの機能で入力を取得します\n"
             # 出力 OUT
             elif addr < 8:
                 if length < 1:
                     self.msg = "Error: 文字長が 0以下 です\n"
                     return -1
                 svc.svc_out(self.GR[1], length, addr)
+                self.msg = "スーパーバイザーコール。OSの機能で文字列を出力します\n"
             # 乱数 RANDINT
             elif addr == 8:
                 min = self.GR[2]
@@ -513,6 +529,7 @@ class CASL2(CPU):
                     self.msg = f"Error: {min} > {max}  RANDINT命令のオペランドは 下限, 上限 です"
                     return -1
                 self.GR[1] = svc.svc_rand(min, max)
+                self.msg = "スーパーバイザーコール。OSの機能で乱数を生成します\n"
                 
             else:
                 self.msg = f"Error: 未定義のSVC命令番号です: {addr}\n"
@@ -545,17 +562,16 @@ class CASL2(CPU):
                 1 if self.isRegisterOP(self.getOperator()) else 2)
 
     def getRow(self) -> int:
-        return self.DICT_PCROW[self.nowPC]
+        return self.DICT_AddrRow.get(self.nowPC, -1)
+    
+    def getAddressRow(self, address:int) -> int:
+        return self.DICT_AddrRow.get(address, -1)
     
     def getLabelRow(self) -> int:
         if self.isRegisterOP(self.DEC[0]):
-            return 0
-        else:
-            addr = int(self.DEC[3], 2)
-            try:
-                return self.DICT_PCROW[addr]
-            except:
-                return 0
+            return -1
+        addr = int(self.DEC[3], 2)
+        return self.DICT_AddrRow.get(addr, -1)
 
     def getAddress(self) -> int:
         if self.isRegisterOP(self.DEC[0]):

@@ -30,6 +30,7 @@ class CPU(metaclass = ABCMeta):
         self.ALU_A = 0
         self.ALU_B = 0
         self.Acc = 0
+        self.is_jump = False
 
         self.msg = ""                                       # GUIに表示するメッセージ。execute()の内部処理を可視化
         self.nowPC = 0                                      # 現在実行中のアドレス。GUIのハイライトに、ジャンプ命令とかの時に困らないため
@@ -73,9 +74,9 @@ class CPU(metaclass = ABCMeta):
     def getNowPC(self) -> int:
         return self.nowPC
     
-    def getLabels(self) -> str:
-        '''ラベル名とアドレスを改行付き文字列にして返す'''
-        return "\n".join(f"{name}\t0x{addr:04X}" for name, addr in self.labels.items())
+    def getLabels(self) -> dict:
+        '''ラベル名とアドレスを辞書で返す'''
+        return self.labels
 
     def getMemory(self) -> str:
         '''メモリアドレス空間を改行付き文字列にして返す'''

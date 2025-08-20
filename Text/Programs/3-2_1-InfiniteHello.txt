@@ -1,7 +1,0 @@
-MAIN    START                ; <────────────────────────┐
-        OUT     string, len  ;                          │ 戻る
-        JUMP    MAIN         ; MAIN、つまり先頭に戻る　　 ───┘
-        RET
-string  DC      'Hello, World!'
-len     DC      13
-        END
