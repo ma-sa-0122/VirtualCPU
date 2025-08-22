@@ -1,0 +1,7 @@
+TEST    START
+        LD      GR1, value1
+        LD      GR3, value2
+        RET
+value   DC      50
+value   DC      -1
+        END

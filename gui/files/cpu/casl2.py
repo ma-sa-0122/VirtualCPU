@@ -347,13 +347,13 @@ class CASL2(CPU):
 
         op = self.DEC[0]                     # オペコード
         mnem = self.getMnemonic(op)          # ニーモニック
-        r1_num = int(self.DEC[1], 2)          # レジスタ1部の数値
+        r1_num = int(self.DEC[1], 2)         # レジスタ1部の数値
         r1 = "GR" + str(r1_num)              # レジスタ1の名前
-        r2_num = int(self.DEC[2], 2)          # レジスタ2部の数値
+        r2_num = int(self.DEC[2], 2)         # レジスタ2部の数値
         r2 = "GR" + str(r2_num)              # レジスタ2の名前
         addr = self.getAddress()             # アドレス値 (指標アドレス加算済み)
-        opr1 = self.getValue(r1)             # r1の値
-        opr2 = self.getAddressValue()        # r2の値 or アドレスの内容
+        opr1 = self.getRegisterValue(r1_num) # r1の値
+        opr2 = self.getNowAddressOrRegisterValue()        # r2の値 or アドレスの内容
         src = r2 if self.isRegisterOP(op) else f"0x{addr:04X}"
 
         # LD命令。アドレスからレジスタに代入。
@@ -578,19 +578,19 @@ class CASL2(CPU):
             return 0x10000
         address = int(self.DEC[3], 2)   # 命令レジスタの下位16bit
         register = int(self.DEC[2], 2)  # 命令レジスタの12~15bit目。修飾部
-        offset = self.GR[register] if register > 0 else 0   # GR0 は指標レジスタにならない
+        offset = self.getRegisterValue(register)
+        if register == 0:
+            offset = 0  # GR0 は指標レジスタにならない
         return address + offset
-    
-    def getAddressValue(self, addr:int = None) -> int:
-        if addr is None:
-            address = int(self.DEC[3], 2)   # 命令レジスタの下位16bit
-            register = self.GR[int(self.DEC[2], 2)]
-            if address == 0:
-                return register
-            else:
-                return int(self.MEM[self.getAddress()], 2)
+        
+    def getNowAddressOrRegisterValue(self):
+        address = int(self.DEC[3], 2)   # 命令レジスタの下位16bit
+        # address が 0 のとき、レジスタと思って opr2 のレジスタ値を返す
+        if address == 0:
+            reg = int(self.DEC[2], 2)  # 命令レジスタの12~15bit目
+            return self.getRegisterValue(reg)
         else:
-            return self.MEM[addr]
+            return int(self.MEM[self.getAddress()], 2)
 
     def getOperator(self) -> str:
         '''命令部の8bitを返す。fetch時点でもdecode後でも関係なく得られる'''

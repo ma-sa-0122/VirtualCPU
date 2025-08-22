@@ -235,42 +235,42 @@ class CPUDiagram(tk.Toplevel):
             return
         # OP addr [,x] 形式。JUMP系0x6_, CALL
         # OP val  [,x] 形式のPUSH も今は共通
-        elif self.op[:4] == "0110" or self.op == "01110000" or self.op == "10000000":    
+        if self.op[:4] == "0110" or self.op == "01110000" or self.op == "10000000":    
             if self.r2 == 0:    return
             self.lightupExec(["opr2-gr", "opr2-gr"+str(self.r2)], color='blue')
             self.setArrowHead("opr2-gr"+str(self.r2), tk.LAST)
+            return
         # OP r, まで確定
-        else:
-            # OP r
-            self.lightupExec(["opr1-gr", "opr1-gr"+str(self.r1)], color='blue')
-            self.setArrowHead("opr1-gr"+str(self.r1), tk.LAST)
-            # OP r, r 形式
-            if self.isRegOP:
-                self.lightupExec(["opr2-gr", "opr2-gr"+str(self.r2)], color='blue')
-                self.setArrowHead("opr2-gr"+str(self.r2), tk.LAST)
-            # OP r, addr [,x] 形式。LD と ST はメモリに伸ばすので特別
-            elif self.op not in ["00010000", "00010100", "00010001"]:
-                if self.r2 == 0:    return
-                self.lightupExec(["opr2-gr", "opr2-gr"+str(self.r2)], color='blue')
-                self.setArrowHead("opr2-gr"+str(self.r2), tk.LAST)
-                return
-            # LD, ST
-            else:
-                if self.op == "00010001": # ST
-                    self.lightupExec(["addr-memory_w"], color='blue')
-                    self.setArrowHead("addr-memory_w", 1, tk.LAST)
-                    self.memory_w.update(self.cpu.getAddress(), self.cpu.getAddressValue(), color="")
-                    if self.r2 == 0: return
-                    self.lightupExec(["opr2-gr"+str(self.r2), "memory_w-gr"], color='blue')
-                    self.setArrowHead("memory_w-gr", tk.FIRST)
-                else: # LD
-                    self.lightupExec(["addr-memory_r"], color='blue')
-                    self.setArrowHead("addr-memory_r", tk.LAST)
-                    self.memory_r.update(self.cpu.getAddress(), self.cpu.getAddressValue(), color="")
-                    if self.r2 == 0: return
-                    self.lightupExec(["opr2-gr"+str(self.r2), "memory_r-opr2"], color='blue')
-                    self.setArrowHead("memory_r-opr2", tk.FIRST)
-                self.lightupExec(["opr2-gr", "opr2-gr"+str(self.r2)], color='blue')
+        self.lightupExec(["opr1-gr", "opr1-gr"+str(self.r1)], color='blue')
+        self.setArrowHead("opr1-gr"+str(self.r1), tk.LAST)
+        # OP r, r 形式
+        if self.isRegOP:
+            self.lightupExec(["opr2-gr", "opr2-gr"+str(self.r2)], color='blue')
+            self.setArrowHead("opr2-gr"+str(self.r2), tk.LAST)
+            return
+        # OP r, val [,x] 形式。LAD と シフト命令(0x5)
+        if self.op == "00010010" or self.op[:4] == "0101":
+            if self.r2 == 0:    return
+            self.lightupExec(["opr2-gr", "opr2-gr"+str(self.r2)], color='blue')
+            self.setArrowHead("opr2-gr"+str(self.r2), tk.LAST)
+            return
+        # OP r, addr [,x] 形式。ST はmemory_wに伸ばすので特別
+        if self.op == "00010001": # ST
+            self.lightupExec(["addr-memory_w"], color='blue')
+            self.setArrowHead("addr-memory_w", 1, tk.LAST)
+            memaddr = self.cpu.getAddress()
+            self.memory_w.update(memaddr, self.cpu.getAddressValue(memaddr), color="")
+            if self.r2 == 0: return
+            self.lightupExec(["opr2-gr", "opr2-gr"+str(self.r2), "memory_w-gr"], color='blue')
+            self.setArrowHead("memory_w-gr", tk.FIRST)
+        else: # LD
+            self.lightupExec(["addr-memory_r"], color='blue')
+            self.setArrowHead("addr-memory_r", tk.LAST)
+            memaddr = self.cpu.getAddress()
+            self.memory_r.update(memaddr, self.cpu.getAddressValue(memaddr), color="")
+            if self.r2 == 0: return
+            self.lightupExec(["opr2-gr", "opr2-gr"+str(self.r2), "memory_r-opr2"], color='blue')
+            self.setArrowHead("memory_r-opr2", tk.FIRST)
 
     def dataFetch(self):
         self.updateState("Data_fetch")
@@ -311,7 +311,7 @@ class CPUDiagram(tk.Toplevel):
                 self.gr[self.r2].changeColor(pink)
                 self.lightupExec(["opr2-gr"+str(self.r2), "reg2-alu"])
                 self.setArrowHead("reg2-alu", tk.LAST)
-            elif self.op[:4] == "0101":  # val 系。シフト命令
+            elif self.op[:4] == "0101":  # val, [,x]。シフト命令
                 self.lightupExec(["val-alu"])
                 self.setArrowHead("val-alu", tk.LAST)
             else:
@@ -350,7 +350,9 @@ class CPUDiagram(tk.Toplevel):
         self.updateState("Write_back")
         if self.op == "00000000" or self.op == "11110000":    # NOP or SVC
             return
-        elif self.op[:4] == "0110" and self.cpu.is_jump:  # JUMP系
+        elif self.op[:4] == "0110":  # JUMP系
+            if not self.cpu.is_jump:
+                return
             self.lightupExec(["addr-pc"])
             self.setArrowHead("addr-pc", 2, tk.LAST)
             self.pc.update(self.cpu.PC)
@@ -373,6 +375,9 @@ class CPUDiagram(tk.Toplevel):
                 self.gr[num].update(self.cpu.GR[num])
                 if self.r2 != 0:
                     self.createGRtoGR()
+            elif self.op[:4] == "0100":  # 比較系 -> GRが変わらない
+                self.lightupExec(["acc-fr"])
+                self.setArrowHead("acc-fr", tk.LAST)
             else:
                 self.fr.update(self.cpu.FR, digit=3)
                 self.gr[num].update(self.cpu.GR[num])
@@ -381,7 +386,7 @@ class CPUDiagram(tk.Toplevel):
                     self.setArrowHead("memr-gr"+str(self.r1), tk.LAST)
                 elif self.op == "00010100": # LD gr, gr
                     self.createGRtoGR()
-                else:
+                else: # ALU系
                     self.lightupExec(["acc-fr", "acc-gr", "acc-gr"+str(self.r1)])
                     self.setArrowHead("acc-fr", tk.LAST)
                     self.setArrowHead("acc-gr"+str(self.r1), tk.LAST)

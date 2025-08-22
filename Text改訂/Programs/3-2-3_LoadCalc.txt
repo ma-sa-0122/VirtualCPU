@@ -1,0 +1,10 @@
+TEST    START
+        LD      GR1, value1
+        LD      GR3, value2
+
+        ADDA    GR1, GR3    ; GR1 + GR3 の結果を、GR1 に保存する。レジスタ同士の加算も出来る！
+
+        RET
+value   DC      50
+value   DC      -1
+        END

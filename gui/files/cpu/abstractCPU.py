@@ -101,19 +101,21 @@ class CPU(metaclass = ABCMeta):
     def getAddress(self) -> int:
         '''命令レジスタのアドレス部と修飾部を参照し、参照先アドレスを返す'''
         pass
-    
-    @abstractmethod
+
     def getAddressValue(self, addr:int) -> int:
         '''引数のメモリ番地に格納されている中身を返す'''
+        return self.MEM[addr]
+
+    @abstractmethod
+    def getNowAddressOrRegisterValue(self):
         '''命令レジスタのアドレス部と修飾部を参照し、参照先アドレスの中身の数値を返す。1語の場合はレジスタの値を返す'''
         pass
 
-    def getValue(self, opr: str) -> int:
-        '''オペランドが数値 or レジスタの場合に使う。中身の値を返す'''
-        if utils.isnum(opr):
-            return int(opr)
+    def getRegisterValue(self, num: int) -> int:
+        if 0 <= num < self.REGISTER_NUM:
+            return self.GR[num]
         else:
-            return self.GR[int(opr[2:])]
+            raise Exception(f"無効なレジスタ番号: {num}")
 
 
     # ----------------------------------------

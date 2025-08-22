@@ -1,0 +1,9 @@
+TEST    START
+        IN      count, =1
+        LD      GR0, count  ; count の中身（つまり入力した数字）を GR0 にロード
+        SUBA    GR0, =#0030 ; GR0の値 から、0x30 を引く。10進数で 48 を指定しても良い
+        ST      GR0, count  ; 計算結果を count に再格納
+        LD      GR1, count  ; count の中身を GR1 に呼んで、入力した数字に書き換わってるか確かめよう
+        RET
+count   DS      1
+        END

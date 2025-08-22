@@ -313,50 +313,15 @@ class Window(tkinter.Tk):
         self.runmenu = tkinter.Menu(self.menubar, tearoff=False)
         self.runmenu.add_command(label="高速実行（F）", command=lambda: self.execute(ExecType.FAST))
         self.runmenu.add_command(label="通常実行（▶）", command=lambda: self.execute(ExecType.ALL))
-        self.runmenu.add_command(label="ステップ実行（→）", command=lambda: self.execStep(ExecType.STEP))
+        self.runmenu.add_command(label="ステップ実行（→）", command=lambda: self.execute(ExecType.STEP))
         self.runmenu.add_command(label="ステップイン（↓）", command=lambda: self.execute(ExecType.STEPIN))
         self.runmenu.add_command(label="CPUメモリステップ（■）", command=lambda: self.execute(ExecType.DIAGRAM))
 
         self.menubar.add_cascade(label='ファイル', menu=self.filemenu)
         self.menubar.add_cascade(label='実行', menu=self.runmenu)
-    
-    def loadFile(self):
-        fTyp = [("", "*")]
-        iDir = os.path.abspath(os.path.dirname(__file__))
-        filename = tkinter.filedialog.askopenfilename(filetypes=fTyp, initialdir=iDir)
-        code = ""
-        if filename != "":
-            try:
-                with open(filename, 'r', encoding="utf-8") as f:
-                    code = f.read()
-            except UnicodeDecodeError:
-                with open(filename, 'r', encoding="shift_jis") as f:
-                    code = f.read()
-        self.codebox.delete("0.0", "end")
-        self.codebox.insert("1.0", code)
-    
-    def saveFile(self):
-        code = self.codebox.get("1.0", "end")
 
-        fTyp = [("CASL2コード", ".casl2")]
-        iDir = os.path.abspath(os.path.dirname(__file__))
-        filename = tkinter.filedialog.asksaveasfilename(filetypes=fTyp, initialdir=iDir, defaultextension="casl2")
-        if filename != "":
-            with open(filename, "w", encoding="utf-8") as f:
-                f.write(code)
-    
-    def saveBinary(self):
-        data = ''.join(self.CPU.MEM)
-        # 8ビットずつintにしてbytesに変換
-        bdata = bytes(int(data[i:i+8], 2) for i in range(0, len(data), 8))
 
-        fTyp = [("バイナリファイル", ".bin")]
-        iDir = os.path.abspath(os.path.dirname(__file__))
-        filename = tkinter.filedialog.asksaveasfilename(filetypes=fTyp, initialdir=iDir, defaultextension="bin")
-        if filename != "":
-            with open(filename, "wb") as f:
-                f.write(bdata)
-
+    # ==================================================
     def buttonSetting(self, flag: str):
         '''
         実行関係のボタンのゾンビ化を管理する。
@@ -367,6 +332,7 @@ class Window(tkinter.Tk):
             self.buttons[name]["state"] = flag
 
 
+    # ==================================================
     # codebox, membox の、実行中命令、参照先アドレスをハイライトする関係
     def clearHighlight(self):
         '''
@@ -379,7 +345,7 @@ class Window(tkinter.Tk):
 
     def rowHighlight(self, label: str):
         '''
-        codebox, membox のハイライトを付ける
+        codebox, membox のハイライトを付ける\n
         label : "row" で 実行中命令(黄色), "label" で 参照先(橙色)
         '''
         code = 0; mem = 0
@@ -398,8 +364,19 @@ class Window(tkinter.Tk):
         self.codebox.tag_add(label, f"{code}.0", f"{code}.end")
         self.membox.tag_remove(label, "0.0", "end")
         self.membox.tag_add(label, f"{mem}.0", f"{mem+ length-1}.end")
+
+    def codeHighlight(self, row: int):
+        '''
+        コードボックスの指定行目を黄色でハイライトする
+        '''
+        self.codebox.tag_remove('row', "0.0", "end")
+        self.codebox.tag_add('row', f"{row}.0", f"{row}.end")
+        # ハイライトの場所にスクロール位置をずらす
+        self.codebox.yview_moveto(0)
+        self.codebox.yview_scroll(row-3, 'units')
     
 
+    # ==================================================
     # テキストボックスの内容を弄る関係
     def infoAdd(self, s: str):
         self.textbox_manager.write("info", s)
@@ -424,7 +401,6 @@ class Window(tkinter.Tk):
 
     def outputClear(self):
         self.textbox_manager.clear("out")
-    
 
     # 追加機能：Outputのフォントサイズ変更
     def increaseFontSize(self, event):
@@ -435,6 +411,7 @@ class Window(tkinter.Tk):
         self.font_outbox.configure(size=current_size - 1)
 
 
+    # ==================================================
     # 実行関係
     def assemble(self) -> int:
         data = self.textbox_manager.getText("code")
@@ -450,6 +427,7 @@ class Window(tkinter.Tk):
         except Exception as e:
             isError = True
             memory = "Error\n" + str(e)
+            errline = e.line
             self.buttonSetting(tkinter.DISABLED)
             self.filemenu.entryconfig("メモリダンプ(binary)を保存", state=tkinter.DISABLED)
         
@@ -459,7 +437,9 @@ class Window(tkinter.Tk):
         self.memClear()
         self.memWrite(memory, 0)
 
-        if isError: return -1
+        if isError:
+            self.codeHighlight(errline)
+            return -1
 
         self.CPUexecution.reset()
         self.updateRegs()
@@ -486,7 +466,7 @@ class Window(tkinter.Tk):
             self.buttons["execute"]['command'] = self.pause
         elif state == 'run':
             self.buttons["execute"]['text'] = '▶'
-            self.buttons["execute"]['command'] = lambda: self.execute(1)
+            self.buttons["execute"]['command'] = lambda: self.execute(ExecType.ALL)
     
     def pause(self):
         self.CPUexecution.is_running = False
@@ -568,3 +548,43 @@ class Window(tkinter.Tk):
         self.memWrite(memory, scroll)
         self.rowHighlight("row")
         self.rowHighlight("label")
+
+
+    # ==================================================
+    # タブバーのファイル操作系
+    def loadFile(self):
+        fTyp = [("", "*")]
+        iDir = os.path.abspath(os.path.dirname(__file__))
+        filename = tkinter.filedialog.askopenfilename(filetypes=fTyp, initialdir=iDir)
+        code = ""
+        if filename != "":
+            try:
+                with open(filename, 'r', encoding="utf-8") as f:
+                    code = f.read()
+            except UnicodeDecodeError:
+                with open(filename, 'r', encoding="shift_jis") as f:
+                    code = f.read()
+        self.codebox.delete("0.0", "end")
+        self.codebox.insert("1.0", code)
+    
+    def saveFile(self):
+        code = self.codebox.get("1.0", "end")
+
+        fTyp = [("CASL2コード", ".casl2")]
+        iDir = os.path.abspath(os.path.dirname(__file__))
+        filename = tkinter.filedialog.asksaveasfilename(filetypes=fTyp, initialdir=iDir, defaultextension="casl2")
+        if filename != "":
+            with open(filename, "w", encoding="utf-8") as f:
+                f.write(code)
+    
+    def saveBinary(self):
+        data = ''.join(self.CPU.MEM)
+        # 8ビットずつintにしてbytesに変換
+        bdata = bytes(int(data[i:i+8], 2) for i in range(0, len(data), 8))
+
+        fTyp = [("バイナリファイル", ".bin")]
+        iDir = os.path.abspath(os.path.dirname(__file__))
+        filename = tkinter.filedialog.asksaveasfilename(filetypes=fTyp, initialdir=iDir, defaultextension="bin")
+        if filename != "":
+            with open(filename, "wb") as f:
+                f.write(bdata)
