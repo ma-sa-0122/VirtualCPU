@@ -27,18 +27,17 @@ pre {
 }
 
 pre:not(.hljs) {
-  padding: 10px 20px;
+  	padding: 10px 20px;
 	line-height: 19px;
+
+	/* 左端に仕切り線を追加 */
+	border-left: 20px solid #aaa; 
+  	padding-left: 5px; /* 線とコードの間に余白 */
 }
 
 code {
 	font-size: 14px;
 	line-height: 19px;
-}
-
-.entry-content pre.code[data-lang="CASL"] {
-  padding: 10px 20px !important;
-	line-height: 19px; 
 }
 
 /* for inline code */

@@ -98,7 +98,7 @@ class CASL2(CPU):
             # 数値の時 (アドレス番地直書き)
             if utils.isnum(addr):
                 addr = utils.toInt(addr)
-                if 0 <= addr < self.MEMLEN:
+                if -self.MEMLEN <= addr < self.MEMLEN:  # 0 <= addr < self.MEMLEN だと、val の時に負数に対応できない
                     # 次のメモリ番地にアドレスを保存
                     self.MEM[address] = utils.binary16(addr)
                 else:
@@ -312,25 +312,25 @@ class CASL2(CPU):
         for addr, label in tempLabel.items():
             self.MEM[addr] = f"{self.labels[label]:016b}"
 
-        return self.getMemory()     # メモリをビット列の文字列に
+        return self.getMemoryStrings()     # メモリをビット列の文字列に
         
 
     def fetch(self) -> None:
         self.nowPC = self.PC
 
-        self.IR = self.MEM[self.PC]
+        self.IR = self.getMemory(self.PC)
 
         if self.isRegisterOP(self.IR[0:8]):   # ニーモニック r1 r2 形式の命令
             self.IR += f"{0x0000:016b}"
             self.PC += 1
         else:
-            self.IR += self.MEM[self.PC+1]
+            self.IR += self.getMemory(self.PC+1)
             self.PC += 2
         self.msg = f"フェッチ: {self.IR}\n"
     
 
     def decode(self) -> int:
-        isINop = (True if self.IR[0:30] == "111100000000000000000000000000" else False)
+        isINop = (True if self.IR[0:30] == f"{0xF0:<030b}" else False)
         self.DEC = [self.IR[0:8], self.IR[8:12], self.IR[12:16], self.IR[16:32]]
         self.msg = (f"デコード:\n"
                     f"  op  : {self.DEC[0]}  ({self.getMnemonic(self.DEC[0])})\n"
@@ -365,7 +365,7 @@ class CASL2(CPU):
         # ST命令。レジスタからアドレスに代入。
         elif mnem == "ST":
             self.msg = f"{r1}の値({opr1}) を 0x{addr:04X} にストアします\n"
-            self.MEM[addr] = utils.binary16(opr1)
+            self.setMemory(addr, opr1)
         
         # LAD。アドレス値をレジスタに代入
         elif mnem == "LAD":
@@ -506,7 +506,7 @@ class CASL2(CPU):
 
         # SVC命令
         elif mnem == "SVC":
-            length = int(self.MEM[self.GR[2]], 2)
+            length = int(self.getMemory(self.GR[2]), 2)
             # 入力 IN
             if addr < 4:
                 if length < 1:
@@ -574,8 +574,6 @@ class CASL2(CPU):
         return self.DICT_AddrRow.get(addr, -1)
 
     def getAddress(self) -> int:
-        if self.isRegisterOP(self.DEC[0]):
-            return 0x10000
         address = int(self.DEC[3], 2)   # 命令レジスタの下位16bit
         register = int(self.DEC[2], 2)  # 命令レジスタの12~15bit目。修飾部
         offset = self.getRegisterValue(register)
@@ -584,13 +582,11 @@ class CASL2(CPU):
         return address + offset
         
     def getNowAddressOrRegisterValue(self):
-        address = int(self.DEC[3], 2)   # 命令レジスタの下位16bit
-        # address が 0 のとき、レジスタと思って opr2 のレジスタ値を返す
-        if address == 0:
+        if self.isRegisterOP(self.DEC[0]):
             reg = int(self.DEC[2], 2)  # 命令レジスタの12~15bit目
             return self.getRegisterValue(reg)
         else:
-            return int(self.MEM[self.getAddress()], 2)
+            return int(self.getMemory(self.getAddress()), 2)
 
     def getOperator(self) -> str:
         '''命令部の8bitを返す。fetch時点でもdecode後でも関係なく得られる'''

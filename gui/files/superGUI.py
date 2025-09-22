@@ -542,7 +542,7 @@ class Window(tkinter.Tk):
         self.label_PCSP["text"] = f"PC: 0x{reg[self.register_num+1]:04X}        SP: 0x{sp[-4:]}"
     
     def updateMemory(self):
-        memory = self.CPU.getMemory()
+        memory = self.CPU.getMemoryStrings()
         scroll = self.membox.yview()[0] # スクロール位置を保持
         self.memClear()
         self.memWrite(memory, scroll)

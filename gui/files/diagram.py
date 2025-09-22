@@ -208,9 +208,9 @@ class CPUDiagram(tk.Toplevel):
 
         pcAddr = self.cpu.getNowPC()
         self.isRegOP = self.cpu.isRegisterOP(self.cpu.IR[0:8])
-        self.memory_pc.update(pcAddr, self.cpu.getAddressValue(pcAddr), pink)
+        self.memory_pc.update(pcAddr, self.cpu.getMemory(pcAddr), pink)
         if not self.isRegOP:
-            self.memory_pc1.update(pcAddr+1, self.cpu.getAddressValue(pcAddr+1), pink)
+            self.memory_pc1.update(pcAddr+1, self.cpu.getMemory(pcAddr+1), pink)
             self.highlight("memory-ir1", "red")
         self.ir.update(self.cpu.IR, digit=32)
         self.pc.changeColor(pink)
@@ -259,7 +259,7 @@ class CPUDiagram(tk.Toplevel):
             self.lightupExec(["addr-memory_w"], color='blue')
             self.setArrowHead("addr-memory_w", 1, tk.LAST)
             memaddr = self.cpu.getAddress()
-            self.memory_w.update(memaddr, self.cpu.getAddressValue(memaddr), color="")
+            self.memory_w.update(memaddr, self.cpu.getMemory(memaddr), color="")
             if self.r2 == 0: return
             self.lightupExec(["opr2-gr", "opr2-gr"+str(self.r2), "memory_w-gr"], color='blue')
             self.setArrowHead("memory_w-gr", tk.FIRST)
@@ -267,7 +267,7 @@ class CPUDiagram(tk.Toplevel):
             self.lightupExec(["addr-memory_r"], color='blue')
             self.setArrowHead("addr-memory_r", tk.LAST)
             memaddr = self.cpu.getAddress()
-            self.memory_r.update(memaddr, self.cpu.getAddressValue(memaddr), color="")
+            self.memory_r.update(memaddr, self.cpu.getMemory(memaddr), color="")
             if self.r2 == 0: return
             self.lightupExec(["opr2-gr", "opr2-gr"+str(self.r2), "memory_r-opr2"], color='blue')
             self.setArrowHead("memory_r-opr2", tk.FIRST)
@@ -368,7 +368,7 @@ class CPUDiagram(tk.Toplevel):
             if self.op == "00010001":   # ST
                 self.lightupExec(["memst-memory", "memst-gr"+str(num)])
                 self.setArrowHead("memst-gr"+str(num), tk.LAST)
-                self.memory_w.update(self.adr, self.cpu.getAddressValue(self.adr))
+                self.memory_w.update(self.adr, self.cpu.getMemory(self.adr))
             elif self.op == "00010010":  # LAD
                 self.lightupExec(["val-gr", "memr-gr"+str(num)])
                 self.setArrowHead("memr-gr"+str(num), tk.LAST)
@@ -414,7 +414,7 @@ class CPUDiagram(tk.Toplevel):
         spval = self.cpu.SP
         if spval < 0x10000:
             self.sp.update(spval)
-            self.memory_sp.update(spval, self.cpu.getAddressValue(spval), color=color)
+            self.memory_sp.update(spval, self.cpu.getMemory(spval), color=color)
         else:
             self.sp.update(0)
             self.memory_sp.update(0, 0, color=color)

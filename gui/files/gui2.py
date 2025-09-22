@@ -37,6 +37,10 @@ class GUI2(Window):
         self.label_FR.pack(anchor=tkinter.W)
         self.label_PCSP.pack(anchor=tkinter.W)
 
+        # レジスタの個数が9以上だと描画に対応していないので、CPUモデル図を無効に
+        if self.register_num >= 9:
+            self.check_button["state"] = tkinter.DISABLED
+
     # テキストボックスの内容を弄る関係
     # labelbox
     def labWrite(self, d: dict):

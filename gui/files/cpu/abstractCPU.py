@@ -1,5 +1,5 @@
 from abc import ABCMeta, abstractmethod
-from typing import Final
+from typing import Final, Union
 
 from files.util import globalValues as gv
 from files.util import utils
@@ -78,7 +78,7 @@ class CPU(metaclass = ABCMeta):
         '''ラベル名とアドレスを辞書で返す'''
         return self.labels
 
-    def getMemory(self) -> str:
+    def getMemoryStrings(self) -> str:
         '''メモリアドレス空間を改行付き文字列にして返す'''
         return "\n".join(f"0x{index:04X} | {bit}    ({int(bit, 2):04X})" for index, bit in enumerate(self.MEM))
 
@@ -102,9 +102,18 @@ class CPU(metaclass = ABCMeta):
         '''命令レジスタのアドレス部と修飾部を参照し、参照先アドレスを返す'''
         pass
 
-    def getAddressValue(self, addr:int) -> int:
+    def getMemory(self, addr:int) -> str:
         '''引数のメモリ番地に格納されている中身を返す'''
+        if addr >= self.MEMLEN:
+            raise Exception("Segmentation Fault!! 参照先が無効です")
         return self.MEM[addr]
+    
+    def setMemory(self, addr:int, value:Union[int, str]):
+        if addr >= self.MEMLEN:
+            raise Exception("Segmentation Fault!! 参照先が無効です")
+        if isinstance(value, int):
+            value = utils.binary16(value)
+        self.MEM[addr] = value
 
     @abstractmethod
     def getNowAddressOrRegisterValue(self):
@@ -122,11 +131,11 @@ class CPU(metaclass = ABCMeta):
     # スタック関係
     def push(self, value: int) -> None:
         self.SP -= 1
-        self.MEM[self.SP] = utils.binary(value)
+        self.setMemory(self.SP, value)
     
     def pop(self, dest: str) -> None:
-        v = int(self.MEM[self.SP], 2)
-        self.MEM[self.SP] = f"{self.INIT_VAL:016b}"
+        v = int(self.getMemory(self.SP), 2)
+        self.setMemory(self.SP, f"{self.INIT_VAL:016b}")
         self.msg = f"0x{self.SP:04X}番地の値({v}) を {dest} にロードし、SP を 1 増やします\n"
         self.SP += 1
         return v
