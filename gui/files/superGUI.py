@@ -3,10 +3,12 @@ import tkinter
 import tkinter.font
 import tkinter.scrolledtext as st
 import tkinter.filedialog
+from tkinter import ttk
 import os
 
 from files.diagram import CPUDiagram
 from files.util import utils
+
 
 
 FONT_MAIN = ("Cascadia Code", 11)
@@ -30,36 +32,11 @@ class Step(IntEnum):
     ACCUMLATE = 5
     EXECUTE = 6
 
-class TextBoxManager:
-    def __init__(self):
-        self.boxes = {}
-    
-    def setInstance(self, name, inst):
-        self.boxes[name] = inst
-    
-    def scroll(self, name, scroll: float):
-        self.boxes[name].yview_moveto(scroll)
-
-    def clear(self, name):
-        box = self.boxes[name]
-        box["state"] = tkinter.NORMAL
-        box.delete("0.0", "end")
-        box["state"] = tkinter.DISABLED
-        box.yview_moveto(0)
-
-    def write(self, name, text, scroll=1):
-        box = self.boxes[name]
-        box["state"] = tkinter.NORMAL
-        box.insert("end", text)
-        box["state"] = tkinter.DISABLED
-        box.yview_moveto(scroll)
-    
-    def getText(self, name):
-        return self.boxes[name].get("0.0", "end")
-
 class ExecuteController:
     def __init__(self, window, cpu):
         self.window = window
+        if cpu is None:
+            raise ValueError('ExecuteController requires cpu to be provided')
         self.cpu = cpu
         self.reset()
 
@@ -175,22 +152,69 @@ class ExecuteController:
             self.on_exec_step_diagram(self.step)
 
 
-class Window(tkinter.Tk):
-    def __init__(self, cpu, windowsize):
-        super().__init__()
+class TextBoxManager:
+    def __init__(self):
+        self.boxes = {}
+    
+    def setInstance(self, name, inst):
+        self.boxes[name] = inst
+    
+    def scroll(self, name, scroll: float):
+        self.boxes[name].yview_moveto(scroll)
 
-        self.title(u"Software Title")
-        self.geometry(windowsize)
-        self.resizable(False, False)
-        self.option_add("*font", FONT_MAIN)
+    def clear(self, name):
+        box = self.boxes[name]
+        box["state"] = tkinter.NORMAL
+        box.delete("0.0", "end")
+        box["state"] = tkinter.DISABLED
+        box.yview_moveto(0)
+
+    def write(self, name, text, scroll=1):
+        box = self.boxes[name]
+        box["state"] = tkinter.NORMAL
+        box.insert("end", text)
+        box["state"] = tkinter.DISABLED
+        box.yview_moveto(scroll)
+    
+    def getText(self, name):
+        return self.boxes[name].get("0.0", "end")
+
+
+class Window(tkinter.Frame):
+    def __init__(self, master, windowsize, env):
+        super().__init__(master)
+
+        self.master = master
+        self.master.title(u"Software Title")
+        self.master.geometry(windowsize)
+        self.master.resizable(False, False)
+        self.master.option_add("*font", FONT_MAIN)
+
+        style = ttk.Style(master)
+        style.configure("Treeview",font=FONT_MAIN)
+        style.configure("Treeview.Heading",font=FONT_MAIN)
 
         self.step = Step.IR_FETCH
         self.showDiagram = tkinter.BooleanVar()
         self.diagram_window = None
 
-        self.CPU = cpu
+        # 環境注入: env を必須とする（gv への依存を排除）
+        if env is None:
+            raise ValueError('Window requires env to be provided')
+        self.env = env
+        # env に cpu_impl が入っていることを期待する
+        if getattr(self.env, 'cpu_impl', None) is None:
+            raise ValueError('Environment must contain cpu_impl')
+        self.CPU = self.env.cpu_impl
+        # CPU にウィンドウ参照を注入（SVC の呼び出しで使用）
+        try:
+            # 既存の CPU 実装が属性を許容することを期待
+            self.CPU.window = self
+        except Exception:
+            pass
         self.register_num = self.CPU.REGISTER_NUM
-        self.CPUexecution = ExecuteController(self, cpu)
+        # ExecuteController にも cpu を注入する
+        self.CPUexecution = ExecuteController(self, cpu=self.CPU)
         self.CPUexecution.setCallback(
             after=self.after,
             promptInput=self.promptInput,
@@ -205,6 +229,8 @@ class Window(tkinter.Tk):
         self.createMenubar()
         self.buttonSetting(tkinter.DISABLED)
 
+        self.pack(fill="both", expand=True)
+
     def createWidgets(self):
         self.createButtons()
         self.createCodebox()
@@ -212,7 +238,7 @@ class Window(tkinter.Tk):
         self.createMemoryLogbox()
         self.createRegisterFrame()
 
-        self.placeWigdgets()
+        self.placeWigdgets_left()
 
         # ショートカットキー関係
         self.bind('<Control-semicolon>', self.increaseFontSize)
@@ -277,17 +303,27 @@ class Window(tkinter.Tk):
         self.infobox.insert("0.0", "実行ログ")
         self.infobox["state"] = tkinter.DISABLED
         self.textbox_manager.setInstance("info", self.infobox)
+
+    def createLabelbox(self):
+        self.labelbox = ttk.Treeview(self, columns=('label', 'address'))
+        self.labelbox.column('#0', width=0, stretch='no')
+        self.labelbox.column('label', width=220, anchor='w')
+        self.labelbox.column('address', width=150, anchor='w')
+        self.labelbox.heading('#0', text='', anchor='w')
+        self.labelbox.heading('label', text='label Name', anchor='center')
+        self.labelbox.heading('address', text='address', anchor='center')
+        self.labelbox.bind("<Button-1>", self.labSelect)    # 左クリック
     
     def createRegisterFrame(self):
         self.frame_info = tkinter.LabelFrame(self, text="Register", width=350)
         self.label_GR = [
-            tkinter.Label(self.frame_info, text=f"R{i}: {0:<8d}  ({utils.binary(0)} | 0x0000)", anchor=tkinter.W)
+            tkinter.Label(self.frame_info, text=f"R{i}: {0:<8d}  ({utils.binary(0, order=self.CPU.REGBIT)} | 0x0000)", anchor=tkinter.W)
             for i in range(self.register_num)
         ]
-        self.label_FR = tkinter.Label(self.frame_info, text="FR: 000", anchor=tkinter.W)
+        self.label_FR = tkinter.Label(self.frame_info, text="FR: 000  (Overflow: 0, Sign: 0, Zero: 0)", anchor=tkinter.W)
         self.label_PCSP = tkinter.Label(self.frame_info, text="PC: 0x0000        SP: 0x0000", anchor=tkinter.W)
 
-    def placeWigdgets(self):
+    def placeWigdgets_left(self):
         self.placeButtons()
 
         self.codebox.pack(side=tkinter.TOP, fill=tkinter.BOTH, expand=True)
@@ -302,7 +338,7 @@ class Window(tkinter.Tk):
 
     def createMenubar(self):
         self.menubar = tkinter.Menu(self)
-        self.config(menu=self.menubar)
+        self.master.config(menu=self.menubar)
 
         self.filemenu = tkinter.Menu(self.menubar, tearoff=False)
         self.filemenu.add_command(label='ソースコードを開く', command=self.loadFile)
@@ -402,6 +438,23 @@ class Window(tkinter.Tk):
     def outputClear(self):
         self.textbox_manager.clear("out")
 
+    # labelbox
+    def labWrite(self, d: dict):
+        for i, (k, v) in enumerate(d.items()):
+            self.labelbox.insert(parent='', index='end', iid=i ,values=(k, f"0x{v:04X}"))
+
+    def labClear(self):
+        self.labelbox.delete(*self.labelbox.get_children())
+    
+    def labSelect(self, event):
+        index = self.labelbox.focus()
+        if not index:
+            return
+        address = self.labelbox.item(index, 'values')[1]
+        # MEMLEN は環境か CPU から取得
+        memlen = self.CPU.MEMLEN if getattr(self.CPU, 'MEMLEN', None) is not None else gv.MEMORY_LENGTH
+        super().memScroll(int(address, 16) / (memlen-1))
+
     # 追加機能：Outputのフォントサイズ変更
     def increaseFontSize(self, event):
         current_size = self.font_outbox['size']
@@ -457,7 +510,7 @@ class Window(tkinter.Tk):
                 self.diagram_window.destroy()
         except AttributeError:
             pass  # diagram_window がまだ存在しないとき
-        self.diagram_window = CPUDiagram(self, self.CPU)
+        self.diagram_window = CPUDiagram(self, cpu=self.CPU)
         self.diagram_window.deiconify()
 
     def changeButton(self, state: str):
@@ -535,7 +588,7 @@ class Window(tkinter.Tk):
     def updateRegs(self):
         reg = self.CPU.getRegisters()
         for i in range(self.register_num):
-            bits = utils.binary(reg[i])
+            bits = utils.binary(reg[i], order=self.CPU.REGBIT)
             self.label_GR[i]["text"] = f"R{i}: {reg[i]:<8d}  ({bits} | 0x{int(bits, 2):04X})"
         self.label_FR["text"] = f"FR: {reg[self.register_num]:03b}"
         sp = f"{reg[self.register_num+2]:04X}"

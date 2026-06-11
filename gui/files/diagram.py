@@ -1,5 +1,6 @@
 import tkinter as tk
 
+
 def binaryN(num: int, digit: int) -> str:
     if num < 0:
         num = (~(-num) & ((1 << digit) -1)) + 1  # ビット反転に桁数制限(& 0xF...) +1 で二の補数表現
@@ -90,11 +91,17 @@ class Memory:
         self.canvas.itemconfig(self.box, fill=color)
 
 class CPUDiagram(tk.Toplevel):
-    def __init__(self, master, cpu):
+    def __init__(self, master, cpu=None):
         super().__init__(master)
         self.title("CPU model diagram")
         self.geometry("900x600")
-        self.cpu = cpu
+        # 明示的なCPU注入を必須に近い形で受け付ける。未指定なら master の CPU を参照し、無ければエラー。
+        if cpu is not None:
+            self.cpu = cpu
+        else:
+            self.cpu = getattr(master, "CPU", None)
+            if self.cpu is None:
+                raise ValueError("CPUDiagram requires a cpu argument or master.CPU to exist")
         self.protocol("WM_DELETE_WINDOW", self.on_close)  # 閉じる処理
 
         self.op = ""

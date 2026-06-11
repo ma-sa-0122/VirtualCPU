@@ -1,0 +1,108 @@
+1から10までの和とシフト、ジャンプ
+LD R0 0
+LD R1 0
+ADDA R1 1
+ADDL R0 R1
+CPA R1 10
+JMI 2
+LD R2 R0
+SLL R2 2
+SRA R2 2
+LD R3 R0
+SLL R3 2
+SRL R3 2
+PUSH 15
+RET
+LD R4 -5
+LD R5 3
+END
+
+
+2021 18AJ006
+
+
+CASL2
+
+https://arcanum.work/contents?id=22
+; 割り算を行う
+; 商を R0 に、余りを R1 に保存する
+MAIN	START		
+	LD	GR1, A	
+	LD	GR2, B	
+	LAD	GR0, 0	;答え（商）格納用にGR0を初期化
+;------ エラー処理 ------
+	CPA	GR1, =0	;わられる数と0を比較
+	JNZ	NX1	;わられる数が0でないならNX1に移動
+	LAD	GR1, 0	;わられる数を0に設定
+	RET		
+NX1	CPA	GR2, =0	;わる数と0を比較
+	JNZ	NX2	;わられる数が0でないならNX1に移動
+	OUT	ERR, ERRLEN	;エラー文出力
+	RET		
+;------ エラー処理終わり ------
+NX2	CALL	DIV	;「DIV」サブルーチンの呼び出し
+	ST	GR0, ANS	;答えをANS番地に格納
+	ST	GR1, MOD	;わられる数（余り）をMOD番地に格納
+	RET		
+DIV	CPA	GR1, GR2	;わられる数とわる数を比較
+	JMI	FIN	;わられる数がわる数より小さいならFINに移動
+	SUBA	GR1, GR2	;わられる数からわる数を引く
+	ADDA	GR0, =1	;商に1を加算
+	JUMP	DIV	;DIV番地に移動
+FIN	RET		
+A	DC	10	;わられる数
+B	DC	4	;わる数
+ANS	DS	1	;答え
+MOD	DS	1	;余り
+ERR	DC	'ERROR'	;エラー文字列
+ERRLEN	DC	5	;エラー文字列の長さ
+	END
+
+
+https://ja.wikipedia.org/wiki/CASL
+; ハノイの塔を解くプログラム
+MAIN   START
+       LD      GR0,N
+       LD      GR1,A
+       LD      GR2,B
+       LD      GR3,C
+       CALL    HANOI       ; hanoi(3, A, B, C)
+       RET
+
+; hanoi(N, X, Y, Z)
+HANOI  CPA     GR0,=1      ; if N == 1 then
+       JZE     DISP        ;  move it, return
+       SUBA    GR0,=1      ; N - 1
+       PUSH    0,GR2       ; swap GR2 GR3
+       LD      GR2,GR3
+       POP     GR3
+       CALL    HANOI       ; hanoi(N-1, X, Z, Y)
+       ST      GR1,MSG1
+       ST      GR2,MSG2    ; now GR2 holds Z
+       OUT     MSG,LNG     ; 'from X to Z'
+       PUSH    0,GR2       ; rotate registers
+       LD      GR2,GR1
+       LD      GR1,GR3
+       POP     GR3
+       CALL    HANOI       ; hanoi(N-1, Y, X, Z)
+       PUSH    0,GR2       ; restore registers
+       LD      GR2,GR1
+       POP     GR1
+       ADDA    GR0,=1      ; also N has restored
+       RET
+
+DISP   ST      GR1,MSG1    ; 'from X to Z'
+       ST      GR3,MSG2
+       OUT     MSG,LNG
+       RET
+
+N      DC      3	; 輪の総数
+LNG    DC      11	; メッセージの長さ
+A      DC      'A'
+B      DC      'B'
+C      DC      'C'
+MSG    DC      'from '
+MSG1   DS      1
+       DC      ' to '
+MSG2   DS      1
+       END

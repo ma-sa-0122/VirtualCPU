@@ -1,4 +1,3 @@
-from files.util import globalValues as gv
 
 # 追加する場合は、MNEMONICSに命令名、expandに展開結果を追加
 
@@ -10,7 +9,7 @@ def setIndex(i):
     index = i
 
 
-def expand(mnemonic, words) -> list:
+def expand(mnemonic, words, register_num: int) -> list:
     # INマクロ命令 入力領域, 入力文字長領域
     if mnemonic == "IN":
         if len(words) < 4:  return []
@@ -41,11 +40,11 @@ def expand(mnemonic, words) -> list:
     
     # RPUSHマクロ命令
     elif mnemonic == "RPUSH":
-        return [["", "PUSH", "0", f"GR{i+1}"] for i in range(gv.REGISTER_NUM)]
+        return [["", "PUSH", "0", f"GR{i+1}"] for i in range(register_num)]
     
     # RPOPマクロ命令
     elif mnemonic == "RPOP":
-        return [["", "POP", f"GR{i+1}"] for i in range(gv.REGISTER_NUM)]
+        return [["", "POP", f"GR{i+1}"] for i in range(register_num)]
     
     # RANDINTマクロ命令 val, val
     elif mnemonic == "RANDINT":

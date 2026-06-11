@@ -1,10 +1,11 @@
-import re
+from typing import Union
 
 from files.cpu.abstractCPU import CPU
 from files.cpu import svc
 from files.cpu import macros
 from files.cpu import exceptions
 from files.util import utils
+from files.cpu.Components.Memory import Memory
 
 class CASL2(CPU):
     # 言語形式：
@@ -26,21 +27,53 @@ class CASL2(CPU):
         "PUSH": 0x70, "POP": 0x71,
         "CALL": 0x80, "RET": 0x81,
         "MUL": 0x90, "DIV": 0x91,
-        "SETE": 0xA0, "SETGE": 0xA1, "SETL": 0xA2,
+        "SETE": 0xA0, "SETNE": 0xA1, "SETG": 0xA2, "SETGE": 0xA3, "SETL": 0xA4, "SETLE": 0xA5,
         "SVC": 0xF0
     }
 
     DICT_AddrRow = {} # {メモリアドレス : コードの行番号}
 
 
-    def __init__(self) -> None:
-        super().__init__()
+    def __init__(self, env=None) -> None:
+        super().__init__(env)
 
-    def isGR(self, opr: str, isXR=False) -> bool:
-        if len(opr) < 3:    return False
-        if isXR:
-            return (opr[0:2] == "GR" and utils.isnum(opr[2:]) and 1 <= int(opr[2:]) < self.REGISTER_NUM)
-        return (opr[0:2] == "GR" and utils.isnum(opr[2:]) and 0 <= int(opr[2:]) < self.REGISTER_NUM)
+    def reset(self):
+        super().reset()
+        # メモリ関係を 語 に合わせる
+        self.DEC = ["", "", "", ""]
+        self.MEM = [f"{self.INIT_VAL:016b}"] * self.MEMLEN
+
+
+    def getMemoryStrings(self) -> str:
+        '''メモリアドレス空間を改行付き文字列にして返す'''
+        # Memory コンポーネントを使っている場合は読み出してフォーマットする
+        if isinstance(self.MEM, Memory):
+            return "\n".join(f"語 {index:04X} | {utils.binary16(self.MEM.read(index))}    ({self.MEM.read(index):04X})" for index in range(self.MEMLEN))
+        return "\n".join(f"語 {index:04X} | {bit}    ({int(bit, 2):04X})" for index, bit in enumerate(self.MEM))
+
+    def getMemory(self, addr:int) -> str:
+        '''引数のメモリ番地に格納されている中身を返す'''
+        if addr >= self.MEMLEN:
+            raise Exception("Segmentation Fault!! 参照先が無効です")
+        if isinstance(self.MEM, Memory):
+            return utils.binary16(self.MEM.read(addr))
+        return self.MEM[addr]
+    
+    def setMemory(self, addr:int, value:Union[int, str]):
+        if addr >= self.MEMLEN:
+            raise Exception("Segmentation Fault!! 参照先が無効です")
+        if isinstance(self.MEM, Memory):
+            # Memory に整数で書き込む
+            if isinstance(value, int):
+                v = value
+            else:
+                v = int(value, 2)
+            self.MEM.write(addr, v)
+            return
+        if isinstance(value, int):
+            value = utils.binary16(value)
+        self.MEM[addr] = value
+
 
     def assemble(self, data: str) -> str:
         '''
@@ -57,7 +90,7 @@ class CASL2(CPU):
             nonlocal address, index
             # 10進数 or 16進数のとき
             if utils.isnum(const):
-                if utils.isValidNum(const):
+                if utils.isValidNum(const, 16):
                     self.MEM[address] = utils.binary16(utils.toInt(const))
                     address += 1
                 else:
@@ -159,8 +192,8 @@ class CASL2(CPU):
                 self.MEM[address] += "00000000"
                 return
 
-            # r のみ -> POP, set系
-            if mnem == "POP" or mnem[:3] == "SET":
+            # r のみ -> POP, set / get系
+            if mnem == "POP" or mnem[:3] in ["SET", "GET"]:
                 if len(words) != 3:
                     raise exceptions.InvalidOperand(index+1)
                 setRegister(words[2])
@@ -285,7 +318,7 @@ class CASL2(CPU):
             # マクロ命令 -> 命令群を生成する
             elif mnem in macros.MNEMONICS:
                 macros.setIndex(index+1)
-                orders = macros.expand(mnem, words)
+                orders = macros.expand(mnem, words, self.REGISTER_NUM)
                 
                 if orders == []:
                     raise exceptions.InvalidOperand(index+1)
@@ -352,7 +385,11 @@ class CASL2(CPU):
         r2_num = int(self.DEC[2], 2)         # レジスタ2部の数値
         r2 = "GR" + str(r2_num)              # レジスタ2の名前
         addr = self.getAddress()             # アドレス値 (指標アドレス加算済み)
-        opr1 = self.getRegisterValue(r1_num) # r1の値
+        # r1_num が有効なレジスタ番号でない場合は 0 を使う（命令によっては r1 が未使用）
+        if 0 <= r1_num < self.REGISTER_NUM:
+            opr1 = self.getRegisterValue(r1_num) # r1の値
+        else:
+            opr1 = 0
         opr2 = self.getNowAddressOrRegisterValue()        # r2の値 or アドレスの内容
         src = r2 if self.isRegisterOP(op) else f"0x{addr:04X}"
 
@@ -378,8 +415,8 @@ class CASL2(CPU):
             isArith = (mnem[3] == "A")
             isSUB = (mnem[0] == "S")
 
-            v1 = utils.binToValue(utils.binary(opr1), isArith)
-            v2 = utils.binToValue(utils.binary(opr2), isArith)
+            v1 = utils.binToValue(utils.binary(opr1, order=self.REGBIT), isArith, order=self.REGBIT)
+            v2 = utils.binToValue(utils.binary(opr2, order=self.REGBIT), isArith, order=self.REGBIT)
 
             self.msg = f"{r1}の値({v1}) に {src}の値({v2}) を{'算術' if isArith else '論理'}{'減算' if isSUB else '加算'}します\n"
             if isSUB: v2 = -v2
@@ -388,8 +425,8 @@ class CASL2(CPU):
 
         # 論理命令  r1 r2,  r1 adr [xr]
         elif mnem in ["AND", "OR", "XOR"]:
-            self.ALU_A = utils.binary(opr1)
-            self.ALU_B = utils.binary(opr2)
+            self.ALU_A = utils.binary(opr1, order=self.REGBIT)
+            self.ALU_B = utils.binary(opr2, order=self.REGBIT)
             v1 = list(self.ALU_A)
             v2 = list(self.ALU_B)
             if mnem == "AND":
@@ -402,18 +439,18 @@ class CASL2(CPU):
                 self.drawHissan(opr1, opr2, "^")
                 bit = ['1' if v1[i] != v2[i] else '0' for i in range(self.REGBIT)]
 
-            val = utils.binToValue(bit, (opr1 < 0 or opr2 < 0))
+            val = utils.binToValue(bit, (opr1 < 0 or opr2 < 0), order=self.REGBIT)
             self.Acc = val
             self.GR[r1_num] = val
-            self.msg += f"  {utils.binary(val)}   ({val})"
+            self.msg += f"  {utils.binary(val, order=self.REGBIT)}   ({val})"
             self.setFlag(val)
 
 
         # 比較命令  r1 r2,  r1 adr [xr]
         elif mnem == "CPA" or mnem == "CPL":
             isArith = (mnem == "CPA")
-            opr1 = utils.binToValue(utils.binary(opr1), isArith)
-            opr2 = utils.binToValue(utils.binary(opr2), isArith)
+            opr1 = utils.binToValue(utils.binary(opr1, order=self.REGBIT), isArith, order=self.REGBIT)
+            opr2 = utils.binToValue(utils.binary(opr2, order=self.REGBIT), isArith, order=self.REGBIT)
 
             self.msg = f"{r1}の値({opr1}) と {src}の値({opr2}) を{'算術' if isArith else '論理'}比較します\n"
             self.compare(opr1, opr2)
@@ -429,8 +466,8 @@ class CASL2(CPU):
                 self.msg = f"{r1}の値({opr1}) を {addr}bit {'算術' if isArith else '論理'}右シフトします\n"
                 (bit, over) = self.rshift(opr1, addr, isArith)
 
-            self.msg += f"\n{utils.binary(opr1)} → {''.join(bit)}\n\n"
-            val = utils.binToValue(bit, isArith)
+            self.msg += f"\n{utils.binary(opr1, order=self.REGBIT)} → {''.join(bit)}\n\n"
+            val = utils.binToValue(bit, isArith, order=self.REGBIT)
             self.GR[r1_num] = val
 
             self.setFlag(val)
@@ -512,14 +549,15 @@ class CASL2(CPU):
                 if length < 1:
                     self.msg = "Error: 文字長が 0以下 です\n"
                     return -1
-                svc.svc_in(self.GR[1], length, addr)
+                # CPU 内部からは self を cpu 引数として渡し、GUI window は self.window を利用する
+                svc.svc_in(self, getattr(self, 'window', None), self.GR[1], length, addr)
                 self.msg = "スーパーバイザーコール。OSの機能で入力を取得します\n"
             # 出力 OUT
             elif addr < 8:
                 if length < 1:
                     self.msg = "Error: 文字長が 0以下 です\n"
                     return -1
-                svc.svc_out(self.GR[1], length, addr)
+                svc.svc_out(self, getattr(self, 'window', None), self.GR[1], length, addr)
                 self.msg = "スーパーバイザーコール。OSの機能で文字列を出力します\n"
             # 乱数 RANDINT
             elif addr == 8:
@@ -548,15 +586,29 @@ class CASL2(CPU):
         
         elif mnem == "SETE":
             self.GR[r1_num] = 1 if self.FR & self.ZERO_FLAG else 0
+        elif mnem == "SETNE":
+            self.GR[r1_num] = 0 if self.FR & self.ZERO_FLAG else 1
+        elif mnem == "SETG":
+            self.GR[r1_num] = 0 if self.FR & (self.SIGN_FLAG | self.ZERO_FLAG) else 1
         elif mnem == "SETGE":
-            self.GR[r1_num] = 1 if not(self.FR & self.SIGN_FLAG) else 0
+            self.GR[r1_num] = 0 if self.FR & self.SIGN_FLAG else 1
         elif mnem == "SETL":
             self.GR[r1_num] = 1 if self.FR & self.SIGN_FLAG else 0
+        elif mnem == "SETLE":
+            self.GR[r1_num] = 1 if self.FR & (self.SIGN_FLAG | self.ZERO_FLAG) else 0
+
+        elif mnem == "GETSP":
+            self.GR[r1_num] = self.SP
+        elif mnem == "SETSP":
+            self.SP = self.GR[r1_num]
 
         return 0
     
 
     # getterたち
+    def getDICT_AddrRow(self) -> dict:
+        return self.DICT_AddrRow
+
     def getExecAddr(self) -> tuple[int, int]:
         return (self.getNowPC(),
                 1 if self.isRegisterOP(self.getOperator()) else 2)
@@ -576,7 +628,11 @@ class CASL2(CPU):
     def getAddress(self) -> int:
         address = int(self.DEC[3], 2)   # 命令レジスタの下位16bit
         register = int(self.DEC[2], 2)  # 命令レジスタの12~15bit目。修飾部
-        offset = self.getRegisterValue(register)
+        # register が有効な汎用レジスタ番号でない場合は 0 と扱う（拡張ビットや即値指定に対応）
+        if not (0 <= register < self.REGISTER_NUM):
+            offset = 0
+        else:
+            offset = self.getRegisterValue(register)
         if register == 0:
             offset = 0  # GR0 は指標レジスタにならない
         return address + offset
@@ -596,7 +652,8 @@ class CASL2(CPU):
         '''
         辞書のvalueからkeyを抽出する => MNEMONIC辞書のbit列から名前を逆算
         '''
-        if self.isRegisterOP(bit): bit = bit[:5] + '0' + bit[6:]
+        if self.isRegisterOP(bit) and bit[:4] != '1010':    # 0xAはレジスタ命令だけど 0 ~ 5まである
+            bit = bit[:5] + '0' + bit[6:]
         value = int(bit, 2)
 
         for k, v in self.MNEMONIC.items():
@@ -616,3 +673,10 @@ class CASL2(CPU):
                 or mnemonic == "01110001" or mnemonic == "10000001"    # 0x71 (POP) or 0x81 (RET)
                 or (mainOP == '1001' and subOP[1] == '1')              # 主OPが9 and 副OPが4以上
                 or mainOP == "1010")                                   # 主OPがA
+    
+    
+    def isGR(self, opr: str, isXR=False) -> bool:
+        if len(opr) < 3:    return False
+        if isXR:
+            return (opr[0:2] == "GR" and utils.isnum(opr[2:]) and 1 <= int(opr[2:]) < self.REGISTER_NUM)
+        return (opr[0:2] == "GR" and utils.isnum(opr[2:]) and 0 <= int(opr[2:]) < self.REGISTER_NUM)

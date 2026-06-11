@@ -1,4 +1,3 @@
-import files.util.globalValues as gv
 import re
 
 def deleteComment(row: str) -> str:
@@ -27,6 +26,7 @@ def splitRow(row: str) -> list:
     
     return words
 
+
 def isnum(s: str) -> bool:
     try:
         if s[0] == "#":   int(s[1:], 16)
@@ -35,38 +35,41 @@ def isnum(s: str) -> bool:
         return False
     return True
 
-def isValidNum(s: str) -> int:
+def isValidNum(s: str, order: int) -> bool:
+    """数値が指定されたビット幅で表現できるか検証する。
+    order は必須（グローバル状態に依存しないため）
+    """
     num = toInt(s)
-    return (0 - (1 << (gv.REGISTER_BIT-1)) <= num < (1 << gv.REGISTER_BIT))
+    return (0 - (1 << (order-1)) <= num < (1 << order))
 
 def toInt(s: str) -> int:
     if s[0] == "#":   return int(s[1:], 16)
     else:             return int(s)
 
-def binary(num: int) -> str:
+def binary(num: int, order: int) -> str:
     '''
     num の2進数表現を返す。負数は2の補数表現を返す
+    order は必須（グローバル状態に依存しないため）
     '''
     if num < 0:
-        num = (~(-num) & ((1 << gv.REGISTER_BIT) -1)) + 1  # ビット反転に桁数制限(& 0xF...) +1 で二の補数表現
-    return f"{num:0{gv.REGISTER_BIT}b}"
+        num = (~(-num) & ((1 << order) -1)) + 1  # ビット反転に桁数制限(& 0xF...) +1 で二の補数表現
+    return f"{num:0{order}b}"[-order:]  # 下 order 桁を取り出す
 
 def binary16(num: int) -> str:
     '''
     num の16bit2進数表現を返す。負数は2の補数表現を返す
     '''
-    if num < 0:
-        num = (~(-num) & ((1 << 16) -1)) + 1  # ビット反転に桁数制限(& 0xF...) +1 で二の補数表現
-    return f"{num:016b}"
+    return binary(num, 16)
 
 
-def binToValue(bin, isArith: bool) -> int:
+def binToValue(bin, isArith: bool, order: int) -> int:
     '''
     str, list[str], list[int] のビット列を数値に直す
+    order は必須（グローバル状態に依存しないため）
     '''
     value = 0
-    for i in range(gv.REGISTER_BIT):
-        value += (1 << ((gv.REGISTER_BIT-1) - i)) * int(bin[i])
-    if isArith and value >= (1 << (gv.REGISTER_BIT - 1)):
-        value = value - (1 << gv.REGISTER_BIT)   #value - 2^nで2の補数が負になるよう調整
+    for i in range(order):
+        value += (1 << ((order-1) - i)) * int(bin[i])
+    if isArith and value >= (1 << (order - 1)):
+        value = value - (1 << order)   #value - 2^nで2の補数が負になるよう調整
     return value

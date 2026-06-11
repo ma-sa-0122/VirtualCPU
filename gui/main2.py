@@ -1,8 +1,8 @@
 import tkinter
 from tkinter import ttk
 
-from files.gui2 import GUI2
-from files.util import globalValues as gv
+from files.util.environment import Environment
+
 
 class MainWindow(tkinter.Tk):
     def __init__(self):
@@ -42,27 +42,37 @@ class MainWindow(tkinter.Tk):
 
     def callWindow(self):
         cpu = self.combo_cpu.get()
-        gv.REGISTER_NUM = int(self.spinb_reg.get())
-        gv.REGISTER_BIT = int(self.spinb_bit.get())
 
-        # CPU名に対応するアーキテクチャをimport、呼び出し
+        self.destroyWidgets()
+        # CPU名に対応するアーキテクチャとwindowをimport、呼び出し
         if cpu == "CASLⅡ":
             from files.cpu.casl2 import CASL2
-            gv.CPU = CASL2()
-        
+            from files.guiCASL2 import GUI2
+            # まず Environment を作成（cpu_impl は後で設定）
+            env = Environment(register_num=int(self.spinb_reg.get()), register_bit=int(self.spinb_bit.get()), memory_length=int(self.spinb_mem.get()), cpu_impl=None, window_impl=None)
+            # 次に CPU を作成して env に差し替え
+            cpu_impl = CASL2(env)
+            env.cpu_impl = cpu_impl
+            # GUI に env を注入して作成
+            win = GUI2(self, env)
+            # Environment に window 実装をセット
+            env.window_impl = win
+            # CPU にウィンドウ参照を注入（SVC 互換）
+            try:
+                cpu_impl.window = win
+            except Exception:
+                pass
         else:
             return
 
-        self.destroy()
-        window = GUI2(gv.CPU)
-        gv.WINDOW = window
-        window.mainloop()
+    def destroyWidgets(self):
+        for widget in self.winfo_children():
+            widget.destroy()
+
 
 
 def main():
     root = MainWindow()
     root.mainloop()
-
-
 
 main()

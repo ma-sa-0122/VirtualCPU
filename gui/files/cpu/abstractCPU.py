@@ -1,36 +1,60 @@
 from abc import ABCMeta, abstractmethod
 from typing import Final, Union
 
-from files.util import globalValues as gv
 from files.util import utils
+from files.cpu.Components import *
+# 明示的に Memory, RegisterFile をインポート（ワイルドカード import に依存せず確実に利用できるように）
+from files.cpu.Components.Memory import Memory
+from files.cpu.Components.Registor import RegisterFile
+from files.cpu.Components.FlagRegister import FlagRegister
+from files.cpu.Components.ALU import ALU, ALU_OP
+from files.cpu.Components.Shifter import Shifter, Shifter_OP
 
 class CPU(metaclass = ABCMeta):
-    OVERFLOW_FLAG :Final[int] = 0b100
-    SIGN_FLAG     :Final[int] = 0b010
-    ZERO_FLAG     :Final[int] = 0b001
+    OVERFLOW_FLAG = 0b100
+    SIGN_FLAG = 0b010
+    ZERO_FLAG = 0b001
 
     INIT_VAL      :Final[int] = 0xFFFF
 
-    def __init__(self) -> None:
-        self.REGBIT = gv.REGISTER_BIT
-        self.REGISTER_NUM = gv.REGISTER_NUM
-        self.MEMLEN = gv.MEMORY_LENGTH
+    def __init__(self, env) -> None:
+        """env: Environment を必須で受け取る（gv 参照は廃止）。
+        env から register_bit / register_num / memory_length を取得して初期化する。
+        """
+        if env is None:
+            raise ValueError("Environment is required for CPU initialization")
+        self.env = env
 
+        # Environment から各種パラメータを取得
+        self.REGBIT = env.register_bit
+        self.REGISTER_NUM = env.register_num
+        self.MEMLEN = env.memory_length
+
+        # self.FLAGS = FlagRegister(self.REGBIT)
+        
         self.reset()
     
     def reset(self) -> None:
-        self.GR = [0] * self.REGISTER_NUM                   # 汎用レジスタ 16bit
-        self.FR = 0                                         # フラグレジスタ。OF, SF, ZFの3bit
-        self.PC = 0                                         # プログラムカウンタ 16bit
-        self.SP = self.MEMLEN                               # スタックポインタ 16bit
-        self.IR = 0                                         # 命令レジスタ 32bit
-        self.DEC = ["{0:08b}", "0000", "0000", "{0:016b}"]  # デコーダー 8+4+4+16bit
-        self.MEM = [f"{self.INIT_VAL:016b}"]*self.MEMLEN    # メモリ 16bit MEMLEN-1番地まで
+        # 汎用レジスタ: Register オブジェクト群を内包するラッパーを使用して互換性を保つ
+        self.GR = RegisterFile(self.REGISTER_NUM)
+        # フラグレジスタ。OF, SF, ZFの3bit（互換のため self.FR はビットマスク整数として残す）
+        self.FR = 0
+        # FlagRegister コンポーネントを使ってフラグ状態を管理
+        self.FLAGS = FlagRegister(self.REGBIT)
+        self.PC = 0                                         # プログラムカウンタ
+        self.SP = self.MEMLEN                               # スタックポインタ
+        self.IR = 0                                         # 命令レジスタ
+        self.DEC = None                                     # デコーダー
+        # 実行時は Components の Memory を使用する（従来の bytearray の代替）
+        self.MEM = Memory(word_size=self.REGBIT, length=self.MEMLEN)
 
         self.ALU_A = 0
         self.ALU_B = 0
         self.Acc = 0
         self.is_jump = False
+        # ALU / Shifter コンポーネント
+        self.alu = ALU()
+        self.shifter = Shifter()
 
         self.msg = ""                                       # GUIに表示するメッセージ。execute()の内部処理を可視化
         self.nowPC = 0                                      # 現在実行中のアドレス。GUIのハイライトに、ジャンプ命令とかの時に困らないため
@@ -41,8 +65,26 @@ class CPU(metaclass = ABCMeta):
         pass
 
     def write(self, data: str) -> str:
+        """Reset → assemble を呼び出し、
+        アッセンブル段階でサブクラスが self.MEM を list（ビット列文字列）で保持した場合は
+        Components.Memory インスタンスへ変換してランタイムで利用する。
+        """
         self.reset()
-        return self.assemble(data)
+        res = self.assemble(data)
+        # サブクラスが組み立て時に list を使っている場合は Memory に変換する
+        if isinstance(self.MEM, list):
+            newmem = Memory(word_size=self.REGBIT, length=self.MEMLEN)
+            for i, v in enumerate(self.MEM):
+                if isinstance(v, str):
+                    try:
+                        val = int(v, 2)
+                    except Exception:
+                        val = 0
+                else:
+                    val = int(v)
+                newmem.write(i, val)
+            self.MEM = newmem
+        return res
     
     @abstractmethod
     def fetch(self) -> None:
@@ -62,6 +104,12 @@ class CPU(metaclass = ABCMeta):
     def getRegisters(self) -> list:
         return self.GR + [self.FR, self.PC, self.SP]
     
+    def getSP(self) -> int:
+        return self.SP
+    
+    def getPC(self) -> int:
+        return self.PC
+    
     def getIR(self) -> int:
         return self.IR
 
@@ -78,9 +126,10 @@ class CPU(metaclass = ABCMeta):
         '''ラベル名とアドレスを辞書で返す'''
         return self.labels
 
+    @abstractmethod
     def getMemoryStrings(self) -> str:
         '''メモリアドレス空間を改行付き文字列にして返す'''
-        return "\n".join(f"0x{index:04X} | {bit}    ({int(bit, 2):04X})" for index, bit in enumerate(self.MEM))
+        pass
 
     @abstractmethod
     def getRow(self) -> int:
@@ -103,14 +152,28 @@ class CPU(metaclass = ABCMeta):
         pass
 
     def getMemory(self, addr:int) -> str:
-        '''引数のメモリ番地に格納されている中身を返す'''
+        '''引数のメモリ番地に格納されている中身（16bit のビット列）を返す'''
         if addr >= self.MEMLEN:
             raise Exception("Segmentation Fault!! 参照先が無効です")
+        # Components.Memory を使っている場合は int を読み出して 16bit 文字列に変換して返す
+        if isinstance(self.MEM, Memory):
+            return utils.binary16(self.MEM.read(addr))
+        # 旧来の list/bytearray をそのまま返す
         return self.MEM[addr]
     
     def setMemory(self, addr:int, value:Union[int, str]):
+        # 互換：int または ビット文字列を受け付ける
         if addr >= self.MEMLEN:
             raise Exception("Segmentation Fault!! 参照先が無効です")
+        if isinstance(self.MEM, Memory):
+            # Memory コンポーネントには整数で書き込む
+            if isinstance(value, int):
+                v = value
+            else:
+                v = int(value, 2)
+            self.MEM.write(addr, v)
+            return
+        # 旧来の実装と互換にするため、文字列へ変換して格納する
         if isinstance(value, int):
             value = utils.binary16(value)
         self.MEM[addr] = value
@@ -130,12 +193,25 @@ class CPU(metaclass = ABCMeta):
     # ----------------------------------------
     # スタック関係
     def push(self, value: int) -> None:
+        # check for stack overflow (SP is word index; valid addresses are 0..MEMLEN-1)
+        if self.SP - 1 < 0:
+            raise Exception(f"Stack overflow: SP would become negative (SP={self.SP})")
         self.SP -= 1
-        self.setMemory(self.SP, value)
+        try:
+            self.setMemory(self.SP, value)
+        except Exception as e:
+            # augment error with stack context
+            raise Exception(f"Push failed when writing to memory address 0x{self.SP:04X}: {e}") from e
     
-    def pop(self, dest: str) -> None:
+    def pop(self, dest: str) -> int:
+        # check for stack underflow (nothing to pop if SP >= MEMLEN)
+        if self.SP >= self.MEMLEN:
+            raise Exception(f"Stack underflow: SP ({self.SP}) is beyond memory bounds (MEMLEN={self.MEMLEN})")
         v = int(self.getMemory(self.SP), 2)
-        self.setMemory(self.SP, f"{self.INIT_VAL:016b}")
+        try:
+            self.setMemory(self.SP, f"{self.INIT_VAL:016b}")
+        except Exception as e:
+            raise Exception(f"Pop failed when clearing memory address 0x{self.SP:04X}: {e}") from e
         self.msg = f"0x{self.SP:04X}番地の値({v}) を {dest} にロードし、SP を 1 増やします\n"
         self.SP += 1
         return v
@@ -152,17 +228,17 @@ class CPU(metaclass = ABCMeta):
         self.ALU_A = a
         self.ALU_B = b
 
-        number = a + b
-
+        # 演算は ALU コンポーネントへ委譲
+        number = self.alu.calculate(a, b, ALU_OP.ADD)
         # 計算結果を レジスタのビット数+1 桁にする (桁あふれしてたらそのまま、そうじゃなければ空白を追加)
-        bit = utils.binary(number)
+        bit = utils.binary(number, order=self.REGBIT)
         bit = ("" if len(bit) > self.REGBIT else " ") + bit
 
         self.drawHissan(a, b, "+")
         self.msg += f" {bit}   ({number})\n"
 
         # 末尾から レジスタのビット数 だけ取り出す
-        value = utils.binToValue(utils.binary(number)[-self.REGBIT:], isArith)
+        value = utils.binToValue(utils.binary(number, order=self.REGBIT)[-self.REGBIT:], isArith, order=self.REGBIT)
         self.Acc = value
 
         self.setFlag(value)
@@ -170,24 +246,33 @@ class CPU(metaclass = ABCMeta):
             max = (1 << (self.REGBIT - 1)) - 1
             if not(-max-1 <= number <= max):
                 self.msg += f"{number} は、符号付き{self.REGBIT}bit (-{max+1} ~ {max}) で表現できないため、OF → 1 になります\n"
-                self.FR |= self.OVERFLOW_FLAG
+                # FlagRegister に OF をセットして FR を再構築
+                self.FLAGS.OF = True
+                self.FR = self.FLAGS.to_bits()
         else:
             max = (1 << self.REGBIT) - 1
             if not(0 <= number <= max):
                 self.msg += f"{number} は、符号付き{self.REGBIT}bit (0 ~ {max}) で表現できないため、OF → 1 になります\n"
-                self.FR |= self.OVERFLOW_FLAG
+                # FlagRegister に OF をセットして FR を再構築
+                self.FLAGS.OF = True
+                self.FR = self.FLAGS.to_bits()
         return value
 
     def mul(self, a: int, b: int) -> int:
-        number = a * b
-        bit = utils.binary(number)
+        # 演算は ALU コンポーネントへ委譲
+        number = self.alu.calculate(a, b, ALU_OP.MUL)
+        bit = utils.binary(number, order=self.REGBIT)
         value = int(bit[-self.REGBIT:] ,2)
         self.setFlag(value)
-        if len(bit) > self.REGBIT:  self.FR |= self.OVERFLOW_FLAG
+        if len(bit) > self.REGBIT:
+            # 乗算でオーバーフローが発生したら OF をセット
+            self.FLAGS.OF = True
+            self.FR = self.FLAGS.to_bits()
         return value
     
     def div(self, a: int, b: int) -> tuple[int, int]:
-        quotient = a // b
+        # 割り算は ALU へ委譲し、剰余は手計算で返す
+        quotient = self.alu.calculate(a, b, ALU_OP.DIV)
         remain = a % b
         return (quotient, remain)
 
@@ -200,69 +285,77 @@ class CPU(metaclass = ABCMeta):
         val = a - b
         if val > 0:
             self.msg += f"{a} - {b} は正の数なので、SF → 0, ZF → 0 です\n"
-            self.FR = 0x000
+            # Flags をクリア
+            self.FLAGS.SF = False
+            self.FLAGS.ZF = False
         elif val == 0:
             self.msg += f"{a} と {b} は (ビット列として) 等しいので、ZF → 1 です\n"
-            self.FR = self.ZERO_FLAG
+            self.FLAGS.SF = False
+            self.FLAGS.ZF = True
         else:
             self.msg += f"{a} - {b} は負の数なので、SF → 1 です\n"
-            self.FR = self.SIGN_FLAG
+            self.FLAGS.SF = True
+            self.FLAGS.ZF = False
+        # FR のビットマスクを更新
+        self.FR = self.FLAGS.to_bits()
 
     def lshift(self, val: int, amount: int, isArith: bool) -> tuple[list[str], int]:
         '''
         val を amount ビットだけ左シフトします。
         isArith が True で 算術左シフト、False で 論理左シフト
+        Shifter コンポーネントを使用するが、結果のビット配列と溢れビットは従来のロジックに合わせて生成する。
         '''
-        self.ALU_A = utils.binary(val)
+        self.ALU_A = utils.binary(val, order=self.REGBIT)
         self.ALU_B = amount
 
-        array = list(self.ALU_A)
-        fixbit = array[0]
-        for _ in range(amount):
-            array.append('0')
-        result = array[amount:amount+self.REGBIT]     # 末尾に0を追加していき、末尾からnビット取る
-        over = int(array[amount-1])
-        if isArith:
-            over = int(array[amount])
-            result[0] = fixbit
-        
-        self.Acc = utils.binToValue(result, isArith)
+        # Shifter コンポーネントに委譲して結果のビット列と over を受け取る
+        (result, over) = self.shifter.shift(val, amount, Shifter_OP.LSHIFT, self.REGBIT, isArith)
+
+        # 結果を反映
+        self.Acc = utils.binToValue(result, isArith, order=self.REGBIT)
         return (result, over)
 
     def rshift(self, val: int, amount: int, isArith: bool) -> tuple[list[str], int]:
         '''
-        val を amount ビットだけ左シフトします。
-        isArith が True で 算術左シフト、False で 論理左シフト
+        val を amount ビットだけ右シフトします。
+        isArith が True で 算術右シフト、False で 論理右シフト
+        Shifter コンポーネントを使用するが、結果のビット配列と溢れビットは従来のロジックに合わせて生成する。
         '''
-        self.ALU_A = utils.binary(val)
+        self.ALU_A = utils.binary(val, order=self.REGBIT)
         self.ALU_B = amount
 
-        array = list(self.ALU_A)
-        fixbit = array[0]
-        for _ in range(amount):
-            array.insert(0, fixbit if isArith else '0')
-        result = array[0:self.REGBIT]                 # 先頭に0を追加していき、先頭からnビット取る
+        # Shifter コンポーネントに委譲して結果のビット列と over を受け取る
+        (result, over) = self.shifter.shift(val, amount, Shifter_OP.RSHIFT, self.REGBIT, isArith)
 
-        self.Acc = utils.binToValue(result, isArith)
-        return (result, int(array[self.REGBIT]))
-
+        # 結果を反映
+        self.Acc = utils.binToValue(result, isArith, order=self.REGBIT)
+        return (result, over)
 
     def setFlag(self, val: int) -> None:
+        """計算結果 val に基づいて SF/ZF を設定し、FR のビットマスクを更新する。
+        OF はオーバーフロー判定の処理で個別に設定する。
+        """
         self.msg += "\n"
-        if utils.binary(val)[0] == '1':
+        # SF の設定（最上位ビット）
+        if utils.binary(val, order=self.REGBIT)[0] == '1':
             self.msg += f"{val} の最上位ビットが1なので、SF → 1 になります\n"
-            self.FR = self.SIGN_FLAG
-        elif val == 0:
-            self.msg += f"結果が 0 なので、ZF → 1 になります\n"
-            self.FR = self.ZERO_FLAG
+            self.FLAGS.SF = True
         else:
-            self.FR = 0x000
+            self.FLAGS.SF = False
+        # ZF の設定
+        if val == 0:
+            self.msg += f"結果が 0 なので、ZF → 1 になります\n"
+            self.FLAGS.ZF = True
+        else:
+            self.FLAGS.ZF = False
+        # FR のビットマスクを FLAGS から再構築
+        self.FR = self.FLAGS.to_bits()
 
     def drawHissan(self, a: int, b: int, op: str) -> None:
         '''
         筆算を self.msg に書きます。opに演算子を指定します
         '''
         self.msg += ("\n"
-                    f"  {utils.binary(a)}   ({a})\n"
-                    f"{op} {utils.binary(b)}   ({b})\n"
+                    f"  {utils.binary(a, order=self.REGBIT)}   ({a})\n"
+                    f"{op} {utils.binary(b, order=self.REGBIT)}   ({b})\n"
                     f"-------------------\n")
