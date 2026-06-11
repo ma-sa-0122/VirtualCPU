@@ -34,24 +34,34 @@
 C:.
 │  main.py
 │  main2.py
+│  Cmain.py
 │
 └─files
-    │  diagram.py
-    │  gui.py
-    │  gui2.py
     │  superGUI.py
+    │  guiCASL2.py
+    │  guiC.py
+    │  diagram.py
     │
     ├─cpu
-    │      abstractCPU.py
-    │      casl2.py
-    │      exceptions.py
-    │      macros.py
-    │      svc.py
+    │   │  abstractCPU.py
+    │   │  casl2.py
+    │   │  casl2x86.py
+    │   │  Ccompiler.py
+    │   │  exceptions.py
+    │   │  macros.py
+    │   │  svc.py
+    │   └─Components
+    │       │  ALU.py
+    │       │  FlagRegister.py
+    │       │  Memory.py
+    │       │  Registor.py
+    │       │  Shifter.py
     │
     └─util
-            globalValues.py
-            utils.py
+        │  utils.py
+        │  environment.py
 ```
+
 
 使用modules  
 
